@@ -1,0 +1,60 @@
+Agent Dodo - Project Structure
+================================
+
+Root Directory:
+├── .gitignore                         # Git ignore configuration
+├── README.md                          # Main project overview
+├── PROJECT_SUMMARY.md                 # Executive summary and status
+│
+├── docs/                              # Complete documentation suite
+│   ├── ARCHITECTURE.md               # Technical architecture (96KB)
+│   ├── BACKLOG.md                    # Development backlog (41KB)
+│   ├── DEV_GUIDE.md                  # Development guide (18KB)
+│   ├── NEXT_STEPS.md                 # Immediate actions (12KB)
+│   ├── PRODUCT_PLAN.md               # Product roadmap (8KB)
+│   └── QUICK_START.md                # Getting started (14KB)
+│
+├── AgentDodo/                        # Main application source
+│   ├── App/                          # App entry point
+│   │   └── README.md (to be created: AgentDodoApp.swift, ContentView.swift)
+│   │
+│   ├── Presentation/                 # SwiftUI Views Layer
+│   │   ├── README.md                # Layer documentation
+│   │   ├── Write/                   # Composer views
+│   │   ├── Inbox/                   # Inbox & conversation views
+│   │   ├── Explore/                 # Search & discovery
+│   │   ├── Drafts/                  # Draft management
+│   │   ├── History/                 # Post history
+│   │   ├── Settings/                # App preferences
+│   │   └── Shared/                  # Reusable components
+│   │       ├── Components/          # UI components
+│   │       └── Modifiers/           # Custom modifiers
+│   │
+│   ├── ViewModels/                  # State Management Layer
+│   │   └── README.md                # Layer documentation
+│   │
+│   ├── Domain/                      # Business Logic Layer
+│   │   ├── README.md               # Layer documentation
+│   │   ├── Models/                 # Domain models
+│   │   ├── UseCases/               # Business use cases
+│   │   └── Protocols/              # Service interfaces
+│   │
+│   ├── Infrastructure/             # External Dependencies Layer
+│   │   ├── README.md              # Layer documentation
+│   │   ├── API/                   # Network layer
+│   │   │   └── Models/           # API request/response models
+│   │   ├── LocalStore/           # SwiftData persistence
+│   │   │   ├── Models/          # SwiftData entities
+│   │   │   └── Mappers/         # Entity-Domain mappers
+│   │   ├── Auth/                # OAuth & Keychain
+│   │   └── Utils/               # Utilities & helpers
+│   │
+│   └── Resources/                # Assets, localization
+│
+├── AgentDodoTests/               # Unit tests
+└── AgentDodoUITests/             # UI/Integration tests
+
+Total Documentation: ~189KB
+Status: Foundation complete, ready for Xcode implementation
+
+Next Step: Open Xcode and create new project (see docs/QUICK_START.md)

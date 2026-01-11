@@ -1,0 +1,32 @@
+name: Agent Dodo CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-14
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Select Xcode 15
+      run: sudo xcode-select -s /Applications/Xcode_15.0.app/Contents/Developer
+      
+    - name: Run SwiftLint
+      run: |
+        brew install swiftlint
+        swiftlint
+      continue-on-error: false
+      
+    # Note: Since we are generating files via CLI, the .xcodeproj might not exist in the repo yet.
+    # Once the user commits the .xcodeproj, this step will build it.
+    # For now, we try to build the Swift package or verify swift files.
+    
+    - name: Build App
+      run: xcodebuild build -scheme AgentDodo -destination 'platform=macOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+      continue-on-error: true # Allowed to fail until xcodeproj is committed
