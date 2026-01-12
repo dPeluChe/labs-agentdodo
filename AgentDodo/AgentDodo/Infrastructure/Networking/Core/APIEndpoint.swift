@@ -1,6 +1,6 @@
 import Foundation
 
-protocol APIEndpoint {
+protocol APIEndpoint: Sendable {
     var baseURL: URL { get }
     var path: String { get }
     var method: HTTPMethod { get }
@@ -40,7 +40,7 @@ extension APIEndpoint {
     }
 }
 
-enum HTTPMethod: String {
+enum HTTPMethod: String, Sendable {
     case GET
     case POST
     case PUT

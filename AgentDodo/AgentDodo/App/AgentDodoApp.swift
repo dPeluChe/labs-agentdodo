@@ -32,19 +32,15 @@ struct AgentDodoApp: App {
         }
     }()
     
-    init() {
-        // Configure shared state with model container
-        Task { @MainActor in
-            SharedComposerState.shared.configure(with: sharedModelContainer)
-            QuickComposerPanelController.shared.modelContainer = sharedModelContainer
-        }
-    }
-
     var body: some Scene {
         WindowGroup {
             MainComposerView(onDismiss: {})
                 .environmentObject(appState)
                 .frame(minWidth: 500, minHeight: 400)
+                .onAppear {
+                    SharedComposerState.shared.configure(with: sharedModelContainer)
+                    QuickComposerPanelController.shared.modelContainer = sharedModelContainer
+                }
         }
         .modelContainer(sharedModelContainer)
         .windowStyle(.hiddenTitleBar)

@@ -26,7 +26,7 @@ actor APIClient {
     // MARK: - Generic Request
     
     func request<T: Decodable>(_ endpoint: APIEndpoint) async throws -> T {
-        guard var request = endpoint.urlRequest else {
+        guard let request = endpoint.urlRequest else {
             throw APIError.invalidURL
         }
         

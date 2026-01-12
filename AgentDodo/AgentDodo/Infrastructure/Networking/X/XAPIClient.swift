@@ -153,7 +153,7 @@ actor XAPIClient {
     
     func getMe() async throws -> XUser {
         let token = try await getValidAccessToken()
-        var endpoint = XAPIEndpoint.getMe
+        let endpoint = XAPIEndpoint.getMe
         let response: XUserResponse = try await authenticatedRequest(endpoint, token: token)
         return response.data
     }
@@ -168,7 +168,7 @@ actor XAPIClient {
     func deleteTweet(id: String) async throws {
         let token = try await getValidAccessToken()
         let endpoint = XAPIEndpoint.deleteTweet(id: id)
-        try await authenticatedRequest(endpoint, token: token) as XDeleteResponse
+        _ = try await authenticatedRequest(endpoint, token: token) as XDeleteResponse
     }
     
     func getUserTweets(userId: String, maxResults: Int = 10) async throws -> [XTweet] {
@@ -194,13 +194,15 @@ actor XAPIClient {
     // MARK: - Authenticated Request Helper
     
     private func authenticatedRequest<T: Decodable>(_ endpoint: APIEndpoint, token: String) async throws -> T {
-        guard var request = endpoint.urlRequest else {
+        guard let request = endpoint.urlRequest else {
             throw APIError.invalidURL
         }
         
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        var mutableRequest = request
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        mutableRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let (data, response) = try await URLSession.shared.data(for: mutableRequest)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -236,7 +238,7 @@ actor XAPIClient {
 
 // MARK: - Response Models
 
-struct XTokenResponse: Decodable {
+struct XTokenResponse: Decodable, Sendable {
     let tokenType: String
     let expiresIn: Int
     let accessToken: String
@@ -244,11 +246,11 @@ struct XTokenResponse: Decodable {
     let scope: String
 }
 
-struct XUserResponse: Decodable {
+struct XUserResponse: Decodable, Sendable {
     let data: XUser
 }
 
-struct XUser: Decodable, Identifiable {
+struct XUser: Decodable, Identifiable, Sendable {
     let id: String
     let name: String
     let username: String
@@ -257,23 +259,23 @@ struct XUser: Decodable, Identifiable {
     let publicMetrics: XPublicMetrics?
 }
 
-struct XPublicMetrics: Decodable {
+struct XPublicMetrics: Decodable, Sendable {
     let followersCount: Int?
     let followingCount: Int?
     let tweetCount: Int?
     let listedCount: Int?
 }
 
-struct XTweetResponse: Decodable {
+struct XTweetResponse: Decodable, Sendable {
     let data: XTweet
 }
 
-struct XTweetsResponse: Decodable {
+struct XTweetsResponse: Decodable, Sendable {
     let data: [XTweet]?
     let meta: XMeta?
 }
 
-struct XTweet: Decodable, Identifiable {
+struct XTweet: Decodable, Identifiable, Sendable {
     let id: String
     let text: String
     let authorId: String?
@@ -281,7 +283,7 @@ struct XTweet: Decodable, Identifiable {
     let publicMetrics: XTweetMetrics?
 }
 
-struct XTweetMetrics: Decodable {
+struct XTweetMetrics: Decodable, Sendable {
     let retweetCount: Int?
     let replyCount: Int?
     let likeCount: Int?
@@ -289,16 +291,16 @@ struct XTweetMetrics: Decodable {
     let impressionCount: Int?
 }
 
-struct XMeta: Decodable {
+struct XMeta: Decodable, Sendable {
     let resultCount: Int?
     let nextToken: String?
     let previousToken: String?
 }
 
-struct XDeleteResponse: Decodable {
+struct XDeleteResponse: Decodable, Sendable {
     let data: XDeleteData
 }
 
-struct XDeleteData: Decodable {
+struct XDeleteData: Decodable, Sendable {
     let deleted: Bool
 }

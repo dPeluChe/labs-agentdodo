@@ -282,11 +282,11 @@ actor GeminiClient {
 
 // MARK: - Models
 
-struct GeminiModelsResponse: Decodable {
+struct GeminiModelsResponse: Decodable, Sendable {
     let models: [GeminiModel]
 }
 
-struct GeminiModel: Decodable, Identifiable {
+struct GeminiModel: Decodable, Identifiable, Sendable {
     let name: String
     let displayName: String?
     let description: String?
@@ -297,7 +297,7 @@ struct GeminiModel: Decodable, Identifiable {
     var id: String { name }
 }
 
-struct GeminiResponse: Decodable {
+struct GeminiResponse: Decodable, Sendable {
     let candidates: [GeminiCandidate]?
     let promptFeedback: GeminiPromptFeedback?
     let usageMetadata: GeminiUsageMetadata?
@@ -307,37 +307,37 @@ struct GeminiResponse: Decodable {
     }
 }
 
-struct GeminiCandidate: Decodable {
+struct GeminiCandidate: Decodable, Sendable {
     let content: GeminiContent
     let finishReason: String?
     let safetyRatings: [GeminiSafetyRating]?
 }
 
-struct GeminiContent: Decodable {
+struct GeminiContent: Decodable, Sendable {
     let parts: [GeminiPart]
     let role: String?
 }
 
-struct GeminiPart: Decodable {
+struct GeminiPart: Decodable, Sendable {
     let text: String?
 }
 
-struct GeminiPromptFeedback: Decodable {
+struct GeminiPromptFeedback: Decodable, Sendable {
     let safetyRatings: [GeminiSafetyRating]?
 }
 
-struct GeminiSafetyRating: Decodable {
+struct GeminiSafetyRating: Decodable, Sendable {
     let category: String
     let probability: String
 }
 
-struct GeminiUsageMetadata: Decodable {
+struct GeminiUsageMetadata: Decodable, Sendable {
     let promptTokenCount: Int?
     let candidatesTokenCount: Int?
     let totalTokenCount: Int?
 }
 
-struct GeminiStreamChunk: Decodable {
+struct GeminiStreamChunk: Decodable, Sendable {
     let candidates: [GeminiCandidate]?
     
     var text: String? {
@@ -345,7 +345,7 @@ struct GeminiStreamChunk: Decodable {
     }
 }
 
-struct GeminiChatMessage {
+struct GeminiChatMessage: Sendable {
     let role: String // "user" or "model"
     let text: String
     
@@ -365,7 +365,7 @@ struct GeminiChatMessage {
     }
 }
 
-struct GeminiGenerationConfig {
+struct GeminiGenerationConfig: Sendable {
     var temperature: Double?
     var topP: Double?
     var topK: Int?
@@ -383,7 +383,7 @@ struct GeminiGenerationConfig {
     }
 }
 
-struct GeminiSafetySetting {
+struct GeminiSafetySetting: Sendable {
     let category: GeminiHarmCategory
     let threshold: GeminiHarmBlockThreshold
     
@@ -395,37 +395,37 @@ struct GeminiSafetySetting {
     }
 }
 
-enum GeminiHarmCategory: String {
+enum GeminiHarmCategory: String, Sendable {
     case harassment = "HARM_CATEGORY_HARASSMENT"
     case hateSpeech = "HARM_CATEGORY_HATE_SPEECH"
     case sexuallyExplicit = "HARM_CATEGORY_SEXUALLY_EXPLICIT"
     case dangerousContent = "HARM_CATEGORY_DANGEROUS_CONTENT"
 }
 
-enum GeminiHarmBlockThreshold: String {
+enum GeminiHarmBlockThreshold: String, Sendable {
     case blockNone = "BLOCK_NONE"
     case blockLowAndAbove = "BLOCK_LOW_AND_ABOVE"
     case blockMediumAndAbove = "BLOCK_MEDIUM_AND_ABOVE"
     case blockOnlyHigh = "BLOCK_ONLY_HIGH"
 }
 
-struct GeminiTokenCountResponse: Decodable {
+struct GeminiTokenCountResponse: Decodable, Sendable {
     let totalTokens: Int
 }
 
-struct GeminiEmbeddingResponse: Decodable {
+struct GeminiEmbeddingResponse: Decodable, Sendable {
     let embedding: GeminiEmbedding
 }
 
-struct GeminiEmbedding: Decodable {
+struct GeminiEmbedding: Decodable, Sendable {
     let values: [Double]
 }
 
-struct GeminiErrorResponse: Decodable {
+struct GeminiErrorResponse: Decodable, Sendable {
     let error: GeminiError
 }
 
-struct GeminiError: Decodable {
+struct GeminiError: Decodable, Sendable {
     let code: Int
     let message: String
     let status: String

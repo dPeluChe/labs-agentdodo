@@ -1,7 +1,7 @@
 import Foundation
 
-enum DraftMapper {
-    static func mapToDomain(_ entity: DraftEntity) -> Draft {
+enum DraftMapper: Sendable {
+    nonisolated static func mapToDomain(_ entity: DraftEntity) -> Draft {
         return Draft(
             id: entity.id,
             text: entity.text,
@@ -12,7 +12,7 @@ enum DraftMapper {
         )
     }
     
-    static func mapToEntity(_ domain: Draft) -> DraftEntity {
+    nonisolated static func mapToEntity(_ domain: Draft) -> DraftEntity {
         return DraftEntity(
             id: domain.id,
             text: domain.text,

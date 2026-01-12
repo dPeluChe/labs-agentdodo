@@ -282,11 +282,11 @@ actor OllamaClient {
 
 // MARK: - Models
 
-struct OllamaModelsResponse: Decodable {
+struct OllamaModelsResponse: Decodable, Sendable {
     let models: [OllamaModel]
 }
 
-struct OllamaModel: Decodable, Identifiable {
+struct OllamaModel: Decodable, Identifiable, Sendable {
     let name: String
     let modifiedAt: String?
     let size: Int64?
@@ -302,7 +302,7 @@ struct OllamaModel: Decodable, Identifiable {
     }
 }
 
-struct OllamaGenerateResponse: Decodable {
+struct OllamaGenerateResponse: Decodable, Sendable {
     let model: String
     let createdAt: String
     let response: String
@@ -320,7 +320,7 @@ struct OllamaGenerateResponse: Decodable {
     }
 }
 
-struct OllamaStreamChunk: Decodable {
+struct OllamaStreamChunk: Decodable, Sendable {
     let model: String
     let createdAt: String?
     let response: String
@@ -334,7 +334,7 @@ struct OllamaStreamChunk: Decodable {
     }
 }
 
-struct OllamaChatMessage {
+struct OllamaChatMessage: Sendable {
     let role: String // "system", "user", "assistant"
     let content: String
     
@@ -355,7 +355,7 @@ struct OllamaChatMessage {
     }
 }
 
-struct OllamaChatResponse: Decodable {
+struct OllamaChatResponse: Decodable, Sendable {
     let model: String
     let createdAt: String
     let message: OllamaChatResponseMessage
@@ -369,12 +369,12 @@ struct OllamaChatResponse: Decodable {
     }
 }
 
-struct OllamaChatResponseMessage: Decodable {
+struct OllamaChatResponseMessage: Decodable, Sendable {
     let role: String
     let content: String
 }
 
-struct OllamaChatStreamChunk: Decodable {
+struct OllamaChatStreamChunk: Decodable, Sendable {
     let model: String
     let createdAt: String?
     let message: OllamaChatResponseMessage?
@@ -388,11 +388,11 @@ struct OllamaChatStreamChunk: Decodable {
     }
 }
 
-struct OllamaEmbeddingsResponse: Decodable {
+struct OllamaEmbeddingsResponse: Decodable, Sendable {
     let embedding: [Double]
 }
 
-struct OllamaOptions {
+struct OllamaOptions: Sendable {
     var temperature: Double?
     var topP: Double?
     var topK: Int?

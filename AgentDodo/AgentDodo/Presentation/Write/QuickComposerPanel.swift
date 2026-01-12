@@ -70,7 +70,7 @@ class QuickComposerPanelController: NSObject, ObservableObject {
         panel.maxSize = NSSize(width: 800, height: 700)
         
         // Create the SwiftUI content with model container
-        var contentView = MainComposerView(onDismiss: { [weak self] in
+        let contentView = MainComposerView(onDismiss: { [weak self] in
             self?.hide()
         })
         
@@ -702,8 +702,12 @@ class SharedComposerState: ObservableObject {
     
     func loadData() async {
         guard let store = localStore else { return }
-        drafts = await store.fetchDrafts()
-        posts = await store.fetchPosts()
+        do {
+            drafts = try await store.fetchDrafts()
+            posts = try await store.fetchPosts()
+        } catch {
+            print("Error loading data: \(error)")
+        }
     }
     
     func saveDraft(text: String, tone: Tone) async {
@@ -718,8 +722,12 @@ class SharedComposerState: ObservableObject {
             attachments: []
         )
         
-        await store.saveDraft(draft)
-        await loadData()
+        do {
+            try await store.saveDraft(draft)
+            await loadData()
+        } catch {
+            print("Error saving draft: \(error)")
+        }
     }
     
     func createPost(text: String, tone: Tone) async {
@@ -734,8 +742,12 @@ class SharedComposerState: ObservableObject {
             tone: tone
         )
         
-        await store.savePost(post)
-        await loadData()
+        do {
+            try await store.savePost(post)
+            await loadData()
+        } catch {
+            print("Error creating post: \(error)")
+        }
     }
 }
 

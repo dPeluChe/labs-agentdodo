@@ -278,11 +278,11 @@ enum AIAssistantTask {
 }
 
 extension LLMManager {
-    func execute(_ task: AIAssistantTask, options: LLMOptions? = .default) async throws -> String {
+    func execute(_ task: AIAssistantTask, options: LLMOptions? = nil) async throws -> String {
         return try await generate(
             prompt: task.prompt,
             system: task.systemPrompt,
-            options: options
+            options: options ?? .default
         )
     }
 }

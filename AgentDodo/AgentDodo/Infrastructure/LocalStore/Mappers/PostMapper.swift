@@ -1,7 +1,7 @@
 import Foundation
 
-enum PostMapper {
-    static func mapToDomain(_ entity: PostEntity) -> Post {
+enum PostMapper: Sendable {
+    nonisolated static func mapToDomain(_ entity: PostEntity) -> Post {
         return Post(
             id: entity.id,
             text: entity.text,
@@ -12,7 +12,7 @@ enum PostMapper {
         )
     }
     
-    static func mapToEntity(_ domain: Post) -> PostEntity {
+    nonisolated static func mapToEntity(_ domain: Post) -> PostEntity {
         return PostEntity(
             id: domain.id,
             text: domain.text,
