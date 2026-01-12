@@ -79,68 +79,125 @@ struct MenuBarContentView: View {
     @ObservedObject var controller: MenuBarController
     @StateObject private var viewModel = MenuBarViewModel()
     @FocusState private var isTextFieldFocused: Bool
+    @State private var showDrafts = false
+    
+    private let characterLimit = 280
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header with char count
             header
             
             Divider()
             
-            // Quick Compose
-            quickComposeSection
+            // Main Content (Compose or Drafts)
+            if showDrafts {
+                draftsListView
+            } else {
+                quickComposeSection
+            }
             
             Divider()
             
-            // Recent Drafts
-            recentDraftsSection
-            
-            Divider()
-            
-            // Footer Actions
+            // Footer Actions (Icons only)
             footerActions
         }
-        .frame(width: 320)
+        .frame(width: 300)
         .background(.ultraThinMaterial)
     }
     
     // MARK: - Header
     
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Image(systemName: "bird.fill")
-                .font(.title2)
+                .font(.system(size: 16))
                 .foregroundStyle(.tint)
             
-            Text("Agent Dodo")
-                .font(.headline)
+            Text(showDrafts ? "Drafts" : "Quick Post")
+                .font(.subheadline.weight(.medium))
             
             Spacer()
             
-            // Connection status indicator
+            // Character count (only in compose mode)
+            if !showDrafts {
+                Text("\(characterLimit - viewModel.quickText.count)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(charCountColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(charCountColor.opacity(0.1), in: Capsule())
+            }
+            
+            // Connection indicator
             Circle()
-                .fill(viewModel.isConnected ? .green : .secondary)
-                .frame(width: 8, height: 8)
+                .fill(viewModel.isConnected ? .green : .orange)
+                .frame(width: 6, height: 6)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+    
+    private var charCountColor: Color {
+        let remaining = characterLimit - viewModel.quickText.count
+        if remaining < 0 { return .red }
+        if remaining < 20 { return .orange }
+        return .secondary
     }
     
     // MARK: - Quick Compose
     
     private var quickComposeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Quick Post")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
+        VStack(spacing: 0) {
+            // Text Editor
+            TextEditor(text: $viewModel.quickText)
+                .font(.system(size: 14))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 100, maxHeight: 150)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .focused($isTextFieldFocused)
+                .overlay(alignment: .topLeading) {
+                    if viewModel.quickText.isEmpty {
+                        Text("What's happening?")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
+                            .allowsHitTesting(false)
+                    }
+                }
             
+            // Progress bar
+            progressBar
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            
+            // Action buttons row
             HStack(spacing: 8) {
-                TextField("What's happening?", text: $viewModel.quickText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(3...5)
-                    .focused($isTextFieldFocused)
+                // Save Draft button (custom pill style)
+                Button {
+                    Task { await viewModel.saveDraft() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 11))
+                        Text("Save")
+                            .font(.caption.weight(.medium))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.secondary.opacity(0.15), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .disabled(viewModel.quickText.isEmpty)
+                .help("Save Draft (⌘S)")
+                .keyboardShortcut("s", modifiers: .command)
                 
+                Spacer()
+                
+                // Post button (custom accent pill)
                 Button {
                     Task {
                         await viewModel.quickPost()
@@ -149,89 +206,153 @@ struct MenuBarContentView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
+                    HStack(spacing: 4) {
+                        if viewModel.isPosting {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        Text("Post")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(viewModel.canPost ? Color.accentColor : Color.secondary.opacity(0.3), in: Capsule())
+                    .foregroundColor(.white)
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(viewModel.canPost ? .accentColor : .secondary)
                 .disabled(!viewModel.canPost || viewModel.isPosting)
+                .keyboardShortcut(.return, modifiers: .command)
             }
-            .padding(12)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal, 12)
-            
-            // Character count
-            HStack {
-                Spacer()
-                Text("\(280 - viewModel.quickText.count)")
-                    .font(.caption2)
-                    .foregroundStyle(viewModel.quickText.count > 260 ? .orange : .secondary)
-            }
-            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
         }
-        .padding(.vertical, 12)
     }
     
-    // MARK: - Recent Drafts
+    // MARK: - Progress Bar
     
-    private var recentDraftsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Recent Drafts")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-            
+    private var progressBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                // Background
+                Rectangle()
+                    .fill(Color.primary.opacity(0.1))
+                
+                // Progress
+                Rectangle()
+                    .fill(progressColor)
+                    .frame(width: geo.size.width * progress)
+            }
+        }
+        .frame(height: 3)
+        .clipShape(Capsule())
+        .animation(.easeOut(duration: 0.15), value: viewModel.quickText.count)
+    }
+    
+    private var progress: CGFloat {
+        min(CGFloat(viewModel.quickText.count) / CGFloat(characterLimit), 1.0)
+    }
+    
+    private var progressColor: Color {
+        let remaining = characterLimit - viewModel.quickText.count
+        if remaining < 0 { return .red }
+        if remaining < 20 { return .orange }
+        return .accentColor
+    }
+    
+    // MARK: - Drafts List
+    
+    private var draftsListView: some View {
+        VStack(spacing: 0) {
             if viewModel.recentDrafts.isEmpty {
-                Text("No drafts yet")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-            } else {
-                ForEach(viewModel.recentDrafts.prefix(3), id: \.self) { draft in
-                    Button {
-                        viewModel.quickText = draft
-                    } label: {
-                        Text(draft)
-                            .lineLimit(1)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color.primary.opacity(0.05))
+                VStack(spacing: 8) {
+                    Image(systemName: "doc.text")
+                        .font(.title2)
+                        .foregroundStyle(.tertiary)
+                    Text("No drafts")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: 120)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 1) {
+                        ForEach(viewModel.recentDrafts, id: \.self) { draft in
+                            Button {
+                                viewModel.quickText = draft
+                                showDrafts = false
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(draft)
+                                        .lineLimit(2)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary)
+                                    
+                                    Text("\(draft.count) chars")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .background(Color.primary.opacity(0.03))
+                        }
+                    }
+                }
+                .frame(height: 150)
             }
         }
-        .padding(.vertical, 8)
     }
     
-    // MARK: - Footer
+    // MARK: - Footer (Icons only)
     
     private var footerActions: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
+            // Drafts toggle
             Button {
-                controller.showQuickComposer()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showDrafts.toggle()
+                }
             } label: {
-                Label("Expand", systemImage: "arrow.up.left.and.arrow.down.right")
-                    .font(.caption)
+                Image(systemName: showDrafts ? "square.and.pencil" : "doc.text")
+                    .font(.system(size: 14))
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.bordered)
+            .help(showDrafts ? "Compose" : "Drafts")
             
             Spacer()
             
+            // Expand
+            Button {
+                controller.showQuickComposer()
+            } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 14))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.bordered)
+            .help("Expand (⌘⇧N)")
+            
+            // Open App
             Button {
                 controller.openMainWindow()
             } label: {
-                Label("Open App", systemImage: "macwindow")
-                    .font(.caption)
+                Image(systemName: "macwindow")
+                    .font(.system(size: 14))
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.borderedProminent)
+            .help("Open App")
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 }
 
@@ -241,9 +362,15 @@ struct MenuBarContentView: View {
 class MenuBarViewModel: ObservableObject {
     @Published var quickText: String = ""
     @Published var isPosting: Bool = false
+    @Published var isSaving: Bool = false
     @Published var postSuccess: Bool = false
+    @Published var saveSuccess: Bool = false
     @Published var isConnected: Bool = false
-    @Published var recentDrafts: [String] = []
+    @Published var recentDrafts: [String] = [
+        "Draft idea about SwiftUI animations...",
+        "Thread about async/await patterns",
+        "Quick tip for macOS developers"
+    ]
     
     var canPost: Bool {
         !quickText.isEmpty && quickText.count <= 280
@@ -264,5 +391,27 @@ class MenuBarViewModel: ObservableObject {
         // Reset success after delay
         try? await Task.sleep(for: .seconds(1))
         postSuccess = false
+    }
+    
+    func saveDraft() async {
+        guard !quickText.isEmpty else { return }
+        
+        isSaving = true
+        
+        // Simulate saving (replace with real persistence)
+        try? await Task.sleep(for: .milliseconds(300))
+        
+        // Add to drafts list
+        recentDrafts.insert(quickText, at: 0)
+        if recentDrafts.count > 10 {
+            recentDrafts.removeLast()
+        }
+        
+        saveSuccess = true
+        isSaving = false
+        
+        // Reset success after delay
+        try? await Task.sleep(for: .seconds(1))
+        saveSuccess = false
     }
 }
