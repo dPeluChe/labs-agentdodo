@@ -112,9 +112,42 @@ struct MainComposerView: View {
         )
         .shadow(color: .black.opacity(0.2), radius: 20, y: 10)
         .padding(6)
+        .overlay(alignment: .top) {
+            // Toast notifications
+            if viewModel.showSaveFeedback {
+                toastView(icon: "checkmark.circle.fill", text: "Draft saved", color: .green)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            if viewModel.showSuccessFeedback {
+                toastView(icon: "paperplane.fill", text: "Posted!", color: .accentColor)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            if viewModel.showErrorFeedback {
+                toastView(icon: "exclamationmark.triangle.fill", text: viewModel.errorMessage, color: .red)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.3), value: viewModel.showSaveFeedback)
+        .animation(.spring(response: 0.3), value: viewModel.showSuccessFeedback)
+        .animation(.spring(response: 0.3), value: viewModel.showErrorFeedback)
         .onAppear {
             isEditorFocused = true
         }
+    }
+    
+    private func toastView(icon: String, text: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .foregroundColor(color)
+            Text(text)
+                .font(.subheadline.weight(.medium))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(color.opacity(0.3), lineWidth: 1))
+        .shadow(color: .black.opacity(0.1), radius: 8, y: 4)
+        .padding(.top, 20)
     }
     
     // MARK: - Mini Sidebar
@@ -567,7 +600,13 @@ struct MainComposerView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     // API Connections
                     settingsSection(title: "Connections") {
-                        settingsRow(icon: "network", title: "X (Twitter)", subtitle: "Not connected", status: .disconnected)
+                        Button {
+                            Task { await viewModel.configureXAPI() }
+                        } label: {
+                            settingsRow(icon: "network", title: "X (Twitter)", subtitle: "Tap to configure", status: .disconnected)
+                        }
+                        .buttonStyle(.plain)
+                        
                         settingsRow(icon: "cpu", title: "Ollama", subtitle: "localhost:11434", status: .connected)
                         settingsRow(icon: "sparkles", title: "Gemini", subtitle: "Not configured", status: .disconnected)
                     }
@@ -761,8 +800,11 @@ class MainComposerViewModel: ObservableObject {
     @Published var isSaving: Bool = false
     @Published var showSuccessFeedback: Bool = false
     @Published var showSaveFeedback: Bool = false
+    @Published var showErrorFeedback: Bool = false
+    @Published var errorMessage: String = ""
     
     private let sharedState = SharedComposerState.shared
+    private let xClient = XOAuth1Client.shared
     
     var drafts: [Draft] { sharedState.drafts }
     var posts: [Post] { sharedState.posts }
@@ -773,6 +815,7 @@ class MainComposerViewModel: ObservableObject {
     
     func loadData() async {
         await sharedState.loadData()
+        await xClient.loadCredentials()
         objectWillChange.send()
     }
     
@@ -781,15 +824,35 @@ class MainComposerViewModel: ObservableObject {
         
         isPosting = true
         
-        await sharedState.createPost(text: text, tone: selectedTone)
-        
-        showSuccessFeedback = true
-        text = ""
-        isPosting = false
-        objectWillChange.send()
-        
-        try? await Task.sleep(for: .seconds(1.5))
-        showSuccessFeedback = false
+        do {
+            // Try to post to X API
+            if await xClient.isConfigured {
+                let response = try await xClient.postTweet(text: text)
+                print("Posted tweet with ID: \(response.data.id)")
+                
+                // Save to local history with remote ID
+                await sharedState.createPost(text: text, tone: selectedTone)
+            } else {
+                // Just save locally if not configured
+                await sharedState.createPost(text: text, tone: selectedTone)
+            }
+            
+            showSuccessFeedback = true
+            text = ""
+            isPosting = false
+            objectWillChange.send()
+            
+            try? await Task.sleep(for: .seconds(1.5))
+            showSuccessFeedback = false
+            
+        } catch {
+            isPosting = false
+            errorMessage = error.localizedDescription
+            showErrorFeedback = true
+            
+            try? await Task.sleep(for: .seconds(3))
+            showErrorFeedback = false
+        }
     }
     
     func saveDraft() async {
@@ -810,5 +873,19 @@ class MainComposerViewModel: ObservableObject {
     func loadDraft(_ draft: Draft) {
         text = draft.text
         selectedTone = draft.tone
+    }
+    
+    func configureXAPI() async {
+        do {
+            try await xClient.configure(
+                consumerKey: XAPIConfig.consumerKey,
+                consumerSecret: XAPIConfig.consumerSecret,
+                accessToken: XAPIConfig.accessToken,
+                accessTokenSecret: XAPIConfig.accessTokenSecret
+            )
+            print("X API configured successfully")
+        } catch {
+            print("Failed to configure X API: \(error)")
+        }
     }
 }

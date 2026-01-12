@@ -127,6 +127,10 @@ Temporary Items
 .env.*
 !.env.example
 
+# API Config (contains secrets)
+**/XAPIConfig.swift
+docs/API_X.md
+
 # IDE
 .vscode/
 .idea/
