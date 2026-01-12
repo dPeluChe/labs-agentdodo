@@ -46,7 +46,7 @@ struct ComposerView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .textBackgroundColor))
+            .background(.ultraThinMaterial)
             
             // Drop Overlay
             if isDropTargeted {

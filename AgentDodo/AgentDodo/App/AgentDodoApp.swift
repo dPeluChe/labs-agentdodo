@@ -10,6 +10,12 @@ struct AgentDodoApp: App {
     // Quick Composer Panel Controller
     @StateObject private var quickComposer = QuickComposerPanelController.shared
     
+    // Menu Bar Controller
+    @StateObject private var menuBar = MenuBarController.shared
+    
+    // App Delegate for Menu Bar setup
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     // SwiftData Container Setup
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([

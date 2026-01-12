@@ -259,31 +259,31 @@ enum ConnectionStatus: String {
 @MainActor
 class APISettingsViewModel: ObservableObject {
     // X API
-    @Published var xConnectionStatus: ConnectionStatus = .checking
+    @Published var xConnectionStatus: ConnectionStatus = .disconnected
     @Published var xClientId: String = ""
     @Published var xClientSecret: String = ""
     @Published var xUser: XUser?
     
     // Ollama
-    @Published var ollamaStatus: ConnectionStatus = .checking
+    @Published var ollamaStatus: ConnectionStatus = .disconnected
     @Published var ollamaBaseURL: String = "http://127.0.0.1:11434"
     @Published var ollamaModels: [String] = []
     @Published var selectedOllamaModel: String = ""
     
     // Gemini
-    @Published var geminiStatus: ConnectionStatus = .checking
+    @Published var geminiStatus: ConnectionStatus = .disconnected
     @Published var geminiApiKey: String = ""
     
     private let keychain = KeychainManager.shared
     
-    // MARK: - Check All Connections
+    // MARK: - Check All Connections (Only when explicitly triggered)
     
     func checkAllConnections() async {
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { await self.checkXConnection() }
-            group.addTask { await self.checkOllamaConnection() }
-            group.addTask { await self.checkGeminiConnection() }
-        }
+        // Check X only if credentials exist
+        await checkXConnection()
+        // Check Gemini only (no network call needed)
+        await checkGeminiConnection()
+        // Don't auto-check Ollama - requires manual test
     }
     
     // MARK: - X API

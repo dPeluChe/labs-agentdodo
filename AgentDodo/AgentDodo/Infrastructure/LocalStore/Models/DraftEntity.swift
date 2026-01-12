@@ -8,7 +8,19 @@ final class DraftEntity {
     var createdAt: Date
     var updatedAt: Date
     var tone: String
-    var attachments: [String]
+    
+    // Store attachments as JSON Data to avoid CoreData Array<String> issues
+    @Attribute(.externalStorage) var attachmentsData: Data?
+    
+    var attachments: [String] {
+        get {
+            guard let data = attachmentsData else { return [] }
+            return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        }
+        set {
+            attachmentsData = try? JSONEncoder().encode(newValue)
+        }
+    }
     
     init(id: UUID = UUID(), 
          text: String, 
@@ -21,6 +33,6 @@ final class DraftEntity {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.tone = tone
-        self.attachments = attachments
+        self.attachmentsData = try? JSONEncoder().encode(attachments)
     }
 }
