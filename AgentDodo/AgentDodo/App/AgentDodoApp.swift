@@ -31,13 +31,24 @@ struct AgentDodoApp: App {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
+    
+    init() {
+        // Configure shared state with model container
+        Task { @MainActor in
+            SharedComposerState.shared.configure(with: sharedModelContainer)
+            QuickComposerPanelController.shared.modelContainer = sharedModelContainer
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainComposerView(onDismiss: {})
                 .environmentObject(appState)
+                .frame(minWidth: 500, minHeight: 400)
         }
         .modelContainer(sharedModelContainer)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
         .commands {
             // File Menu - Quick Post
             CommandGroup(replacing: .newItem) {

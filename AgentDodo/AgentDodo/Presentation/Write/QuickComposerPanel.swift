@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import SwiftData
 
 // MARK: - Quick Composer Panel Controller
 
@@ -9,6 +10,8 @@ class QuickComposerPanelController: NSObject, ObservableObject {
     
     private var panel: NSPanel?
     @Published var isVisible = false
+    
+    var modelContainer: ModelContainer?
     
     private override init() {
         super.init()
@@ -42,8 +45,8 @@ class QuickComposerPanelController: NSObject, ObservableObject {
     
     private func createPanel() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 420),
-            styleMask: [.titled, .closable, .resizable, .nonactivatingPanel, .utilityWindow],
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 450),
+            styleMask: [.titled, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -57,16 +60,25 @@ class QuickComposerPanelController: NSObject, ObservableObject {
         panel.titleVisibility = .hidden
         panel.backgroundColor = .clear
         
-        // Set minimum size
-        panel.minSize = NSSize(width: 420, height: 350)
-        panel.maxSize = NSSize(width: 700, height: 600)
+        // Hide standard window buttons
+        panel.standardWindowButton(.closeButton)?.isHidden = true
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
         
-        // Create the SwiftUI content
-        let contentView = MainComposerView(onDismiss: { [weak self] in
+        // Set minimum size
+        panel.minSize = NSSize(width: 450, height: 380)
+        panel.maxSize = NSSize(width: 800, height: 700)
+        
+        // Create the SwiftUI content with model container
+        var contentView = MainComposerView(onDismiss: { [weak self] in
             self?.hide()
         })
         
-        panel.contentView = NSHostingView(rootView: contentView)
+        if let container = modelContainer {
+            panel.contentView = NSHostingView(rootView: contentView.modelContainer(container))
+        } else {
+            panel.contentView = NSHostingView(rootView: contentView)
+        }
         
         self.panel = panel
     }
@@ -109,13 +121,15 @@ struct MainComposerView: View {
     
     private var miniSidebar: some View {
         VStack(spacing: 4) {
-            // App Icon
-            Image(systemName: "bird.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(.tint)
-                .frame(width: 36, height: 36)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+            // App Icon + Close button
+            HStack(spacing: 0) {
+                Image(systemName: "bird.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.tint)
+            }
+            .frame(width: 36, height: 36)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
             
             // Section buttons
             ForEach(ComposerSection.allCases, id: \.self) { section in
@@ -124,15 +138,20 @@ struct MainComposerView: View {
             
             Spacer()
             
-            // Settings
+            // Settings section button
             Button {
-                MenuBarController.shared.openMainWindow()
-                onDismiss()
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    currentSection = .settings
+                }
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 14))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(currentSection == .settings ? .accentColor : .secondary)
                     .frame(width: 32, height: 32)
+                    .background(
+                        currentSection == .settings ? Color.accentColor.opacity(0.15) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
             }
             .buttonStyle(.plain)
             .help("Settings")
@@ -142,14 +161,15 @@ struct MainComposerView: View {
                 onDismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 28, height: 28)
+                    .background(Color.secondary.opacity(0.1), in: Circle())
             }
             .buttonStyle(.plain)
             .help("Close (Esc)")
             .keyboardShortcut(.escape, modifiers: [])
-            .padding(.bottom, 8)
+            .padding(.bottom, 10)
         }
         .frame(width: 52)
         .background(Color.primary.opacity(0.03))
@@ -185,6 +205,8 @@ struct MainComposerView: View {
             draftsView
         case .history:
             historyView
+        case .settings:
+            settingsView
         }
     }
     
@@ -385,30 +407,39 @@ struct MainComposerView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 1) {
-                        ForEach(viewModel.drafts, id: \.self) { draft in
+                        ForEach(viewModel.drafts) { draft in
                             draftRow(draft)
                         }
                     }
                 }
             }
         }
+        .task {
+            await viewModel.loadData()
+        }
     }
     
-    private func draftRow(_ draft: String) -> some View {
+    private func draftRow(_ draft: Draft) -> some View {
         Button {
-            viewModel.text = draft
+            viewModel.loadDraft(draft)
             currentSection = .compose
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Text(draft)
+                Text(draft.text)
                     .lineLimit(2)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.leading)
                 
-                Text("\(draft.count) characters")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 8) {
+                    Text("\(draft.text.count) chars")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    
+                    Text(draft.updatedAt, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.quaternary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
@@ -428,6 +459,12 @@ struct MainComposerView: View {
                 Text("History")
                     .font(.subheadline.weight(.medium))
                 Spacer()
+                Text("\(viewModel.posts.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.1), in: Capsule())
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -435,40 +472,63 @@ struct MainComposerView: View {
             Divider()
             
             // History list
-            if viewModel.history.isEmpty {
+            if viewModel.posts.isEmpty {
                 emptyState(icon: "clock", title: "No posts yet", subtitle: "Your posted content will appear here")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 1) {
-                        ForEach(viewModel.history, id: \.self) { post in
+                        ForEach(viewModel.posts) { post in
                             historyRow(post)
                         }
                     }
                 }
             }
         }
+        .task {
+            await viewModel.loadData()
+        }
     }
     
-    private func historyRow(_ post: String) -> some View {
+    private func historyRow(_ post: Post) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(post)
+            Text(post.text)
                 .lineLimit(2)
                 .font(.subheadline)
                 .foregroundStyle(.primary)
             
             HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: statusIcon(post.status))
                     .font(.system(size: 10))
-                    .foregroundStyle(.green)
-                Text("Posted")
+                    .foregroundStyle(statusColor(post.status))
+                Text(post.status.rawValue.capitalized)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                
+                Text(post.createdAt, style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.quaternary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color.primary.opacity(0.02))
+    }
+    
+    private func statusIcon(_ status: PostStatus) -> String {
+        switch status {
+        case .queued: return "clock"
+        case .sent: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.circle.fill"
+        }
+    }
+    
+    private func statusColor(_ status: PostStatus) -> Color {
+        switch status {
+        case .queued: return .orange
+        case .sent: return .green
+        case .failed: return .red
+        }
     }
     
     // MARK: - Empty State
@@ -487,6 +547,112 @@ struct MainComposerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+    
+    // MARK: - Settings View
+    
+    private var settingsView: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Settings")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            
+            Divider()
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // API Connections
+                    settingsSection(title: "Connections") {
+                        settingsRow(icon: "network", title: "X (Twitter)", subtitle: "Not connected", status: .disconnected)
+                        settingsRow(icon: "cpu", title: "Ollama", subtitle: "localhost:11434", status: .connected)
+                        settingsRow(icon: "sparkles", title: "Gemini", subtitle: "Not configured", status: .disconnected)
+                    }
+                    
+                    // Preferences
+                    settingsSection(title: "Preferences") {
+                        Toggle(isOn: .constant(true)) {
+                            HStack {
+                                Image(systemName: "doc.badge.plus")
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 20)
+                                Text("Auto-save drafts")
+                                    .font(.subheadline)
+                            }
+                        }
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        
+                        Toggle(isOn: .constant(false)) {
+                            HStack {
+                                Image(systemName: "bell")
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 20)
+                                Text("Post notifications")
+                                    .font(.subheadline)
+                            }
+                        }
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    }
+                    
+                    // About
+                    settingsSection(title: "About") {
+                        HStack {
+                            Text("Version")
+                                .font(.subheadline)
+                            Spacer()
+                            Text("1.0.0")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(16)
+            }
+        }
+    }
+    
+    private func settingsSection(title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            
+            VStack(spacing: 12) {
+                content()
+            }
+            .padding(12)
+            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+    
+    private func settingsRow(icon: String, title: String, subtitle: String, status: ConnectionStatus) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(.secondary)
+                .frame(width: 20)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            
+            Spacer()
+            
+            Circle()
+                .fill(status == .connected ? Color.green : Color.orange)
+                .frame(width: 8, height: 8)
+        }
+    }
 }
 
 // MARK: - Composer Section
@@ -495,12 +661,14 @@ enum ComposerSection: CaseIterable {
     case compose
     case drafts
     case history
+    case settings
     
     var title: String {
         switch self {
         case .compose: return "Compose"
         case .drafts: return "Drafts"
         case .history: return "History"
+        case .settings: return "Settings"
         }
     }
     
@@ -509,7 +677,65 @@ enum ComposerSection: CaseIterable {
         case .compose: return "square.and.pencil"
         case .drafts: return "doc.text"
         case .history: return "clock"
+        case .settings: return "gearshape"
         }
+    }
+}
+
+// MARK: - Shared Composer State (Singleton for Menu Bar + Main Composer sync)
+
+@MainActor
+class SharedComposerState: ObservableObject {
+    static let shared = SharedComposerState()
+    
+    @Published var drafts: [Draft] = []
+    @Published var posts: [Post] = []
+    
+    private var localStore: LocalStore?
+    
+    private init() {}
+    
+    func configure(with container: ModelContainer) {
+        self.localStore = LocalStore(modelContainer: container)
+        Task { await loadData() }
+    }
+    
+    func loadData() async {
+        guard let store = localStore else { return }
+        drafts = await store.fetchDrafts()
+        posts = await store.fetchPosts()
+    }
+    
+    func saveDraft(text: String, tone: Tone) async {
+        guard let store = localStore, !text.isEmpty else { return }
+        
+        let draft = Draft(
+            id: UUID(),
+            text: text,
+            createdAt: Date(),
+            updatedAt: Date(),
+            tone: tone,
+            attachments: []
+        )
+        
+        await store.saveDraft(draft)
+        await loadData()
+    }
+    
+    func createPost(text: String, tone: Tone) async {
+        guard let store = localStore, !text.isEmpty else { return }
+        
+        let post = Post(
+            id: UUID(),
+            text: text,
+            status: .queued,
+            createdAt: Date(),
+            remoteId: nil,
+            tone: tone
+        )
+        
+        await store.savePost(post)
+        await loadData()
     }
 }
 
@@ -522,18 +748,20 @@ class MainComposerViewModel: ObservableObject {
     @Published var isPosting: Bool = false
     @Published var isSaving: Bool = false
     @Published var showSuccessFeedback: Bool = false
-    @Published var drafts: [String] = [
-        "Draft idea about SwiftUI animations...",
-        "Thread about async/await patterns",
-        "Quick tip for macOS developers"
-    ]
-    @Published var history: [String] = [
-        "Just shipped a new feature! 🚀",
-        "SwiftUI is amazing for building native apps"
-    ]
+    @Published var showSaveFeedback: Bool = false
+    
+    private let sharedState = SharedComposerState.shared
+    
+    var drafts: [Draft] { sharedState.drafts }
+    var posts: [Post] { sharedState.posts }
     
     var canPost: Bool {
         !text.isEmpty && text.count <= 280
+    }
+    
+    func loadData() async {
+        await sharedState.loadData()
+        objectWillChange.send()
     }
     
     func post() async {
@@ -541,16 +769,14 @@ class MainComposerViewModel: ObservableObject {
         
         isPosting = true
         
-        // Simulate posting
-        try? await Task.sleep(for: .milliseconds(500))
-        
-        // Add to history
-        history.insert(text, at: 0)
+        await sharedState.createPost(text: text, tone: selectedTone)
         
         showSuccessFeedback = true
+        text = ""
         isPosting = false
+        objectWillChange.send()
         
-        try? await Task.sleep(for: .seconds(1))
+        try? await Task.sleep(for: .seconds(1.5))
         showSuccessFeedback = false
     }
     
@@ -559,10 +785,18 @@ class MainComposerViewModel: ObservableObject {
         
         isSaving = true
         
-        try? await Task.sleep(for: .milliseconds(300))
+        await sharedState.saveDraft(text: text, tone: selectedTone)
         
-        drafts.insert(text, at: 0)
-        
+        showSaveFeedback = true
         isSaving = false
+        objectWillChange.send()
+        
+        try? await Task.sleep(for: .seconds(1))
+        showSaveFeedback = false
+    }
+    
+    func loadDraft(_ draft: Draft) {
+        text = draft.text
+        selectedTone = draft.tone
     }
 }

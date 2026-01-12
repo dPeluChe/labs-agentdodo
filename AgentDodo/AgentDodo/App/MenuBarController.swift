@@ -280,18 +280,18 @@ struct MenuBarContentView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 1) {
-                        ForEach(viewModel.recentDrafts, id: \.self) { draft in
+                        ForEach(viewModel.recentDrafts) { draft in
                             Button {
-                                viewModel.quickText = draft
+                                viewModel.loadDraft(draft)
                                 showDrafts = false
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(draft)
+                                    Text(draft.text)
                                         .lineLimit(2)
                                         .font(.subheadline)
                                         .foregroundStyle(.primary)
                                     
-                                    Text("\(draft.count) chars")
+                                    Text("\(draft.text.count) chars")
                                         .font(.caption2)
                                         .foregroundStyle(.tertiary)
                                 }
@@ -307,6 +307,9 @@ struct MenuBarContentView: View {
                 }
                 .frame(height: 150)
             }
+        }
+        .task {
+            await viewModel.loadData()
         }
     }
     
@@ -366,14 +369,18 @@ class MenuBarViewModel: ObservableObject {
     @Published var postSuccess: Bool = false
     @Published var saveSuccess: Bool = false
     @Published var isConnected: Bool = false
-    @Published var recentDrafts: [String] = [
-        "Draft idea about SwiftUI animations...",
-        "Thread about async/await patterns",
-        "Quick tip for macOS developers"
-    ]
+    
+    private let sharedState = SharedComposerState.shared
+    
+    var recentDrafts: [Draft] { sharedState.drafts }
     
     var canPost: Bool {
         !quickText.isEmpty && quickText.count <= 280
+    }
+    
+    func loadData() async {
+        await sharedState.loadData()
+        objectWillChange.send()
     }
     
     func quickPost() async {
@@ -381,12 +388,12 @@ class MenuBarViewModel: ObservableObject {
         
         isPosting = true
         
-        // Simulate posting (replace with real API)
-        try? await Task.sleep(for: .milliseconds(500))
+        await sharedState.createPost(text: quickText, tone: .neutral)
         
         postSuccess = true
         quickText = ""
         isPosting = false
+        objectWillChange.send()
         
         // Reset success after delay
         try? await Task.sleep(for: .seconds(1))
@@ -398,20 +405,19 @@ class MenuBarViewModel: ObservableObject {
         
         isSaving = true
         
-        // Simulate saving (replace with real persistence)
-        try? await Task.sleep(for: .milliseconds(300))
-        
-        // Add to drafts list
-        recentDrafts.insert(quickText, at: 0)
-        if recentDrafts.count > 10 {
-            recentDrafts.removeLast()
-        }
+        await sharedState.saveDraft(text: quickText, tone: .neutral)
         
         saveSuccess = true
+        quickText = ""
         isSaving = false
+        objectWillChange.send()
         
         // Reset success after delay
         try? await Task.sleep(for: .seconds(1))
         saveSuccess = false
+    }
+    
+    func loadDraft(_ draft: Draft) {
+        quickText = draft.text
     }
 }
