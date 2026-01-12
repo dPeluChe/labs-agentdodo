@@ -132,6 +132,9 @@ struct MainComposerView: View {
         .animation(.spring(response: 0.3), value: viewModel.showErrorFeedback)
         .onAppear {
             isEditorFocused = true
+            Task {
+                await viewModel.loadData()
+            }
         }
     }
     
@@ -600,12 +603,43 @@ struct MainComposerView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     // API Connections
                     settingsSection(title: "Connections") {
-                        Button {
-                            Task { await viewModel.configureXAPI() }
-                        } label: {
-                            settingsRow(icon: "network", title: "X (Twitter)", subtitle: "Tap to configure", status: .disconnected)
+                        VStack(spacing: 8) {
+                            Button {
+                                print("[Settings] X button tapped")
+                                Task {
+                                    print("[Settings] Starting X API configuration...")
+                                    await viewModel.configureXAPI()
+                                    print("[Settings] X API configuration completed")
+                                }
+                            } label: {
+                                settingsRow(
+                                    icon: "network",
+                                    title: "X (Twitter)",
+                                    subtitle: viewModel.isXConfigured ? "Connected" : "Tap to configure",
+                                    status: viewModel.isXConfigured ? .connected : .disconnected
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            
+                            if viewModel.isXConfigured {
+                                Button {
+                                    Task { await viewModel.testXPost() }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "paperplane")
+                                            .foregroundColor(.accentColor)
+                                        Text("Send Test Tweet")
+                                            .font(.caption)
+                                            .foregroundColor(.accentColor)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.accentColor.opacity(0.1))
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                         
                         settingsRow(icon: "cpu", title: "Ollama", subtitle: "localhost:11434", status: .connected)
                         settingsRow(icon: "sparkles", title: "Gemini", subtitle: "Not configured", status: .disconnected)
@@ -802,6 +836,7 @@ class MainComposerViewModel: ObservableObject {
     @Published var showSaveFeedback: Bool = false
     @Published var showErrorFeedback: Bool = false
     @Published var errorMessage: String = ""
+    @Published var isXConfigured: Bool = false
     
     private let sharedState = SharedComposerState.shared
     private let xClient = XOAuth1Client.shared
@@ -816,6 +851,7 @@ class MainComposerViewModel: ObservableObject {
     func loadData() async {
         await sharedState.loadData()
         await xClient.loadCredentials()
+        isXConfigured = await xClient.isConfigured
         objectWillChange.send()
     }
     
@@ -883,9 +919,43 @@ class MainComposerViewModel: ObservableObject {
                 accessToken: XAPIConfig.accessToken,
                 accessTokenSecret: XAPIConfig.accessTokenSecret
             )
+            isXConfigured = true
+            showSaveFeedback = true
             print("X API configured successfully")
+            
+            try? await Task.sleep(for: .seconds(1.5))
+            showSaveFeedback = false
         } catch {
+            errorMessage = "Failed to configure X: \(error.localizedDescription)"
+            showErrorFeedback = true
             print("Failed to configure X API: \(error)")
+            
+            try? await Task.sleep(for: .seconds(3))
+            showErrorFeedback = false
+        }
+    }
+    
+    func testXPost() async {
+        guard await xClient.isConfigured else {
+            errorMessage = "X API not configured"
+            showErrorFeedback = true
+            try? await Task.sleep(for: .seconds(2))
+            showErrorFeedback = false
+            return
+        }
+        
+        do {
+            let response = try await xClient.postTweet(text: "Test from AgentDodo 🐦")
+            print("Posted tweet: \(response.data.id)")
+            showSuccessFeedback = true
+            try? await Task.sleep(for: .seconds(1.5))
+            showSuccessFeedback = false
+        } catch {
+            errorMessage = error.localizedDescription
+            showErrorFeedback = true
+            print("Post failed: \(error)")
+            try? await Task.sleep(for: .seconds(3))
+            showErrorFeedback = false
         }
     }
 }

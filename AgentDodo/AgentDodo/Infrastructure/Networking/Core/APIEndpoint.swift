@@ -18,7 +18,7 @@ extension APIEndpoint {
     var requiresAuth: Bool { true }
     var timeout: TimeInterval { 30 }
     
-    var urlRequest: URLRequest? {
+    nonisolated var urlRequest: URLRequest? {
         var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: true)
         components?.queryItems = queryItems
         

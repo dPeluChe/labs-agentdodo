@@ -117,20 +117,27 @@ actor APIClient {
         fileName: String,
         mimeType: String
     ) async throws -> T {
+        // Capture endpoint properties synchronously before async work
+        let baseURL = endpoint.baseURL
+        let path = endpoint.path
+        let queryItems = endpoint.queryItems
+        let method = endpoint.method
+        let headers = endpoint.headers
+        
         guard var components = URLComponents(
-            url: endpoint.baseURL.appendingPathComponent(endpoint.path),
+            url: baseURL.appendingPathComponent(path),
             resolvingAgainstBaseURL: true
         ) else {
             throw APIError.invalidURL
         }
-        components.queryItems = endpoint.queryItems
+        components.queryItems = queryItems
         
         guard let url = components.url else {
             throw APIError.invalidURL
         }
         
         var request = URLRequest(url: url)
-        request.httpMethod = endpoint.method.rawValue
+        request.httpMethod = method.rawValue
         request.timeoutInterval = 120 // Longer timeout for uploads
         
         // Multipart form data
@@ -146,7 +153,7 @@ actor APIClient {
         
         request.httpBody = body
         
-        endpoint.headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
+        headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
         
         let (data, response) = try await performRequest(request)
         

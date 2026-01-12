@@ -27,6 +27,8 @@ actor XOAuth1Client {
         accessToken: String,
         accessTokenSecret: String
     ) async throws {
+        print("[XOAuth1Client] Configuring with consumer key: \(consumerKey.prefix(10))...")
+        
         self.consumerKey = consumerKey
         self.consumerSecret = consumerSecret
         self.accessToken = accessToken
@@ -37,6 +39,8 @@ actor XOAuth1Client {
         try await keychain.save(consumerSecret, for: .xApiSecret)
         try await keychain.save(accessToken, for: .xAccessToken)
         try await keychain.save(accessTokenSecret, for: .xAccessTokenSecret)
+        
+        print("[XOAuth1Client] Configuration saved to keychain successfully")
     }
     
     func loadCredentials() async {
@@ -44,6 +48,8 @@ actor XOAuth1Client {
         consumerSecret = try? await keychain.retrieve(.xApiSecret)
         accessToken = try? await keychain.retrieve(.xAccessToken)
         accessTokenSecret = try? await keychain.retrieve(.xAccessTokenSecret)
+        
+        print("[XOAuth1Client] Loaded credentials - isConfigured: \(isConfigured)")
     }
     
     var isConfigured: Bool {
