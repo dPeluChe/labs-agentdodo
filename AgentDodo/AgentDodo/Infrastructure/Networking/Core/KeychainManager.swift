@@ -15,6 +15,7 @@ actor KeychainManager {
         case xClientSecret = "x_client_secret"
         case xAccessToken = "x_access_token"
         case xRefreshToken = "x_refresh_token"
+        case xUsername = "x_username"
         case xApiKey = "x_api_key"
         case xApiSecret = "x_api_secret"
         case xAccessTokenSecret = "x_access_token_secret"
@@ -104,7 +105,16 @@ actor KeychainManager {
     // MARK: - Clear All
     
     func clearAll() throws {
-        for key in [Key.xClientId, .xClientSecret, .xAccessToken, .xRefreshToken, .geminiApiKey, .ollamaBaseURL, .openAIApiKey] {
+        for key in [
+            Key.xClientId,
+            .xClientSecret,
+            .xAccessToken,
+            .xRefreshToken,
+            .xUsername,
+            .geminiApiKey,
+            .ollamaBaseURL,
+            .openAIApiKey
+        ] {
             try delete(key)
         }
     }

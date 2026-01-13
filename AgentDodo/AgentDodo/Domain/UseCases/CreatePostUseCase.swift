@@ -28,6 +28,7 @@ class CreatePostUseCaseImpl: CreatePostUseCase {
             status: .sent, // Since it's mock for now, we mark as sent
             createdAt: Date(),
             remoteId: "mock_\(UUID().uuidString)",
+            accountUsername: nil,
             tone: tone
         )
         

@@ -104,6 +104,9 @@ struct MenuBarContentView: View {
         }
         .frame(width: 300)
         .background(.ultraThinMaterial)
+        .onReceive(NotificationCenter.default.publisher(for: .quickComposerNewPost)) { _ in
+            viewModel.resetComposer()
+        }
     }
     
     // MARK: - Header
@@ -323,11 +326,9 @@ struct MenuBarContentView: View {
                     showDrafts.toggle()
                 }
             } label: {
-                Image(systemName: showDrafts ? "square.and.pencil" : "doc.text")
-                    .font(.system(size: 14))
-                    .frame(width: 28, height: 28)
+                footerIcon(systemName: showDrafts ? "square.and.pencil" : "doc.text", isActive: showDrafts)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
             .help(showDrafts ? "Compose" : "Drafts")
             
             Spacer()
@@ -336,26 +337,24 @@ struct MenuBarContentView: View {
             Button {
                 controller.showQuickComposer()
             } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 14))
-                    .frame(width: 28, height: 28)
+                footerIcon(systemName: "arrow.up.left.and.arrow.down.right", isActive: false)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
             .help("Expand (⌘⇧N)")
-            
-            // Open App
-            Button {
-                controller.openMainWindow()
-            } label: {
-                Image(systemName: "macwindow")
-                    .font(.system(size: 14))
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.borderedProminent)
-            .help("Open App")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+    
+    private func footerIcon(systemName: String, isActive: Bool) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 14))
+            .foregroundColor(isActive ? .accentColor : .secondary)
+            .frame(width: 28, height: 28)
+            .background(
+                isActive ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
     }
 }
 
@@ -371,6 +370,9 @@ class MenuBarViewModel: ObservableObject {
     @Published var isConnected: Bool = false
     
     private let sharedState = SharedComposerState.shared
+    private let xClient = XAPIClient.shared
+    private let keychain = KeychainManager.shared
+    private var currentDraftId: UUID?
     
     var recentDrafts: [Draft] { sharedState.drafts }
     
@@ -380,6 +382,7 @@ class MenuBarViewModel: ObservableObject {
     
     func loadData() async {
         await sharedState.loadData()
+        isConnected = await xClient.isAuthenticated
         objectWillChange.send()
     }
     
@@ -388,7 +391,23 @@ class MenuBarViewModel: ObservableObject {
         
         isPosting = true
         
-        await sharedState.createPost(text: quickText, tone: .neutral)
+        if await xClient.isAuthenticated {
+            do {
+                let response = try await xClient.createTweet(text: quickText)
+                let accountUsername = await resolveAccountUsername()
+                await sharedState.createPost(
+                    text: quickText,
+                    tone: .neutral,
+                    status: .sent,
+                    remoteId: response.id,
+                    accountUsername: accountUsername
+                )
+            } catch {
+                await sharedState.createPost(text: quickText, tone: .neutral, status: .failed)
+            }
+        } else {
+            await sharedState.createPost(text: quickText, tone: .neutral, status: .queued)
+        }
         
         postSuccess = true
         quickText = ""
@@ -405,7 +424,9 @@ class MenuBarViewModel: ObservableObject {
         
         isSaving = true
         
-        await sharedState.saveDraft(text: quickText, tone: .neutral)
+        if let draft = await sharedState.saveDraft(text: quickText, tone: .neutral, existingDraftId: currentDraftId) {
+            currentDraftId = draft.id
+        }
         
         saveSuccess = true
         quickText = ""
@@ -419,5 +440,18 @@ class MenuBarViewModel: ObservableObject {
     
     func loadDraft(_ draft: Draft) {
         quickText = draft.text
+        currentDraftId = draft.id
+    }
+    
+    func resetComposer() {
+        quickText = ""
+        currentDraftId = nil
+    }
+    
+    private func resolveAccountUsername() async -> String? {
+        if let stored = try? await keychain.retrieve(.xUsername), !stored.isEmpty {
+            return stored
+        }
+        return nil
     }
 }

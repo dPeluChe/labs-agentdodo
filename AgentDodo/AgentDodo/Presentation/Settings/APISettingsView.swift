@@ -45,14 +45,14 @@ struct APISettingsView: View {
                 TextField("Client ID", text: $viewModel.xClientId)
                     .textFieldStyle(.roundedBorder)
                 
-                SecureField("Client Secret", text: $viewModel.xClientSecret)
+                SecureField("Client Secret (Optional)", text: $viewModel.xClientSecret)
                     .textFieldStyle(.roundedBorder)
                 
                 Button("Connect with X") {
                     Task { await viewModel.connectX() }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.xClientId.isEmpty || viewModel.xClientSecret.isEmpty)
+                .disabled(viewModel.xClientId.isEmpty)
             } else if viewModel.xConnectionStatus == .connected {
                 if let user = viewModel.xUser {
                     HStack {
@@ -61,11 +61,28 @@ struct APISettingsView: View {
                         Text("@\(user.username)")
                             .fontWeight(.medium)
                     }
+                } else if !viewModel.xUsername.isEmpty {
+                    HStack {
+                        Text("Logged in as")
+                            .foregroundStyle(.secondary)
+                        Text("@\(viewModel.xUsername)")
+                            .fontWeight(.medium)
+                    }
                 }
                 
                 Button("Disconnect", role: .destructive) {
                     Task { await viewModel.disconnectX() }
                 }
+                
+                Button("Reset X Credentials", role: .destructive) {
+                    Task { await viewModel.resetXCredentials() }
+                }
+                .font(.caption)
+            } else {
+                Button("Reset X Credentials", role: .destructive) {
+                    Task { await viewModel.resetXCredentials() }
+                }
+                .font(.caption)
             }
         } header: {
             Text("Social Platform")
@@ -263,6 +280,7 @@ class APISettingsViewModel: ObservableObject {
     @Published var xClientId: String = ""
     @Published var xClientSecret: String = ""
     @Published var xUser: XUser?
+    @Published var xUsername: String = ""
     
     // Ollama
     @Published var ollamaStatus: ConnectionStatus = .disconnected
@@ -275,10 +293,14 @@ class APISettingsViewModel: ObservableObject {
     @Published var geminiApiKey: String = ""
     
     private let keychain = KeychainManager.shared
+    private var oauthSession: XOAuth2AuthorizationSession?
+    private let xRedirectURI = "agentdodo://auth/callback"
+    private let xCallbackScheme = "agentdodo"
     
     // MARK: - Check All Connections (Only when explicitly triggered)
     
     func checkAllConnections() async {
+        await loadXCredentialsIfNeeded()
         // Check X only if credentials exist
         await checkXConnection()
         // Check Gemini only (no network call needed)
@@ -288,6 +310,34 @@ class APISettingsViewModel: ObservableObject {
     
     // MARK: - X API
     
+    private func loadXCredentialsIfNeeded() async {
+        if xClientId.isEmpty {
+            if let stored = try? await keychain.retrieve(.xClientId) {
+                xClientId = stored
+            } else if !XAPIConfig.clientID.isEmpty {
+                xClientId = XAPIConfig.clientID
+            }
+        }
+        
+        if xClientSecret.isEmpty {
+            if let stored = try? await keychain.retrieve(.xClientSecret) {
+                xClientSecret = stored
+            } else if !XAPIConfig.clientSecret.isEmpty {
+                xClientSecret = XAPIConfig.clientSecret
+            }
+        }
+        
+        if xClientId == XAPIConfig.consumerKey {
+            xClientId = XAPIConfig.clientID
+        }
+        
+        if xUsername.isEmpty {
+            if let stored = try? await keychain.retrieve(.xUsername) {
+                xUsername = stored
+            }
+        }
+    }
+    
     private func checkXConnection() async {
         xConnectionStatus = .checking
         
@@ -296,6 +346,8 @@ class APISettingsViewModel: ObservableObject {
             do {
                 let user = try await XAPIClient.shared.getMe()
                 xUser = user
+                xUsername = user.username
+                try? await keychain.save(user.username, for: .xUsername)
                 xConnectionStatus = .connected
             } catch {
                 xConnectionStatus = .error
@@ -306,16 +358,62 @@ class APISettingsViewModel: ObservableObject {
     }
     
     func connectX() async {
+        xConnectionStatus = .checking
+        
         // Save credentials to keychain
         do {
             try await keychain.save(xClientId, for: .xClientId)
             try await keychain.save(xClientSecret, for: .xClientSecret)
             
-            // OAuth flow would be triggered here
-            // For now, just update status
-            xConnectionStatus = .disconnected
+            let resolvedClientId = xClientId == XAPIConfig.consumerKey ? XAPIConfig.clientID : xClientId
+            guard let auth = XAPIClient.shared.getAuthorizationURL(
+                clientId: resolvedClientId,
+                redirectURI: xRedirectURI
+            ) else {
+                throw XOAuth2AuthError.unableToStart
+            }
+            
+            print("[X OAuth2] Client ID prefix: \(resolvedClientId.prefix(8))")
+            print("[X OAuth2] Auth URL: \(auth.url.absoluteString)")
+            let session = XOAuth2AuthorizationSession()
+            oauthSession = session
+            
+            let callbackURL = try await session.start(
+                url: auth.url,
+                callbackScheme: xCallbackScheme
+            )
+            
+            print("[X OAuth2] Callback URL: \(callbackURL.absoluteString)")
+            guard let code = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "code" })?
+                .value else {
+                let items = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?
+                    .queryItems?
+                    .map { "\($0.name)=\($0.value ?? "")" }
+                    .joined(separator: "&") ?? ""
+                print("[X OAuth2] Callback query items: \(items)")
+                throw XOAuth2AuthError.missingAuthorizationCode
+            }
+            
+            _ = try await XAPIClient.shared.exchangeCodeForToken(
+                clientId: resolvedClientId,
+                code: code,
+                codeVerifier: auth.pkce.codeVerifier,
+                redirectURI: xRedirectURI
+            )
+            
+            let user = try await XAPIClient.shared.getMe()
+            xUser = user
+            xUsername = user.username
+            try? await keychain.save(user.username, for: .xUsername)
+            xConnectionStatus = .connected
         } catch {
-            xConnectionStatus = .error
+            if let authError = error as? XOAuth2AuthError, authError == .cancelled {
+                xConnectionStatus = .disconnected
+            } else {
+                xConnectionStatus = .error
+            }
         }
     }
     
@@ -323,6 +421,23 @@ class APISettingsViewModel: ObservableObject {
         do {
             try await XAPIClient.shared.logout()
             xUser = nil
+            xConnectionStatus = .disconnected
+        } catch {
+            xConnectionStatus = .error
+        }
+    }
+    
+    func resetXCredentials() async {
+        do {
+            try await keychain.delete(.xClientId)
+            try await keychain.delete(.xClientSecret)
+            try await keychain.delete(.xAccessToken)
+            try await keychain.delete(.xRefreshToken)
+            try await keychain.delete(.xUsername)
+            xClientId = ""
+            xClientSecret = ""
+            xUser = nil
+            xUsername = ""
             xConnectionStatus = .disconnected
         } catch {
             xConnectionStatus = .error

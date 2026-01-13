@@ -3,6 +3,10 @@ import AppKit
 import Combine
 import SwiftData
 
+extension Notification.Name {
+    static let quickComposerNewPost = Notification.Name("quickComposerNewPost")
+}
+
 // MARK: - Quick Composer Panel Controller
 
 class QuickComposerPanelController: NSObject, ObservableObject {
@@ -36,6 +40,7 @@ class QuickComposerPanelController: NSObject, ObservableObject {
         
         // Activate app to bring focus
         NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .quickComposerNewPost, object: nil)
     }
     
     func hide() {
@@ -90,6 +95,7 @@ struct MainComposerView: View {
     @StateObject private var viewModel = MainComposerViewModel()
     @FocusState private var isEditorFocused: Bool
     @State private var currentSection: ComposerSection = .compose
+    @Environment(\.openURL) private var openURL
     
     let onDismiss: () -> Void
     
@@ -122,6 +128,10 @@ struct MainComposerView: View {
                 toastView(icon: "paperplane.fill", text: "Posted!", color: .accentColor)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
+            if viewModel.showResetFeedback {
+                toastView(icon: "key.fill", text: "X credentials cleared", color: .red)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             if viewModel.showErrorFeedback {
                 toastView(icon: "exclamationmark.triangle.fill", text: viewModel.errorMessage, color: .red)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -129,12 +139,16 @@ struct MainComposerView: View {
         }
         .animation(.spring(response: 0.3), value: viewModel.showSaveFeedback)
         .animation(.spring(response: 0.3), value: viewModel.showSuccessFeedback)
+        .animation(.spring(response: 0.3), value: viewModel.showResetFeedback)
         .animation(.spring(response: 0.3), value: viewModel.showErrorFeedback)
         .onAppear {
             isEditorFocused = true
             Task {
                 await viewModel.loadData()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .quickComposerNewPost)) { _ in
+            viewModel.resetComposer()
         }
     }
     
@@ -168,7 +182,7 @@ struct MainComposerView: View {
             .padding(.bottom, 8)
             
             // Section buttons
-            ForEach(ComposerSection.allCases, id: \.self) { section in
+            ForEach(ComposerSection.sidebarCases, id: \.self) { section in
                 sidebarButton(section)
             }
             
@@ -540,7 +554,25 @@ struct MainComposerView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 
-                Text(post.createdAt, style: .relative)
+                if let username = post.accountUsername, !username.isEmpty {
+                    Text("@\(username)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                
+                if let url = postURL(for: post) {
+                    Button {
+                        openURL(url)
+                    } label: {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open on X")
+                }
+                
+                Text(relativeTimestamp(post.createdAt))
                     .font(.caption2)
                     .foregroundStyle(.quaternary)
             }
@@ -565,6 +597,23 @@ struct MainComposerView: View {
         case .sent: return .green
         case .failed: return .red
         }
+    }
+    
+    private func relativeTimestamp(_ date: Date) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.allowedUnits = [.minute, .hour, .day, .weekOfMonth, .month, .year]
+        formatter.maximumUnitCount = 1
+        let now = Date()
+        if now.timeIntervalSince(date) < 60 {
+            return "1m"
+        }
+        return formatter.string(from: date, to: now) ?? "1m"
+    }
+    
+    private func postURL(for post: Post) -> URL? {
+        guard post.status == .sent, let remoteId = post.remoteId else { return nil }
+        return URL(string: "https://x.com/i/web/status/\(remoteId)")
     }
     
     // MARK: - Empty State
@@ -607,21 +656,21 @@ struct MainComposerView: View {
                             Button {
                                 print("[Settings] X button tapped")
                                 Task {
-                                    print("[Settings] Starting X API configuration...")
-                                    await viewModel.configureXAPI()
-                                    print("[Settings] X API configuration completed")
+                                    print("[Settings] Starting X OAuth2 sign-in...")
+                                    await viewModel.connectX()
+                                    print("[Settings] X OAuth2 completed")
                                 }
                             } label: {
                                 settingsRow(
                                     icon: "network",
                                     title: "X (Twitter)",
-                                    subtitle: viewModel.isXConfigured ? "Connected" : "Tap to configure",
+                                    subtitle: viewModel.isXConfigured ? "Connected" : "Tap to sign in",
                                     status: viewModel.isXConfigured ? .connected : .disconnected
                                 )
                             }
                             .buttonStyle(.plain)
                             
-                            if viewModel.isXConfigured {
+                            HStack(spacing: 8) {
                                 Button {
                                     Task { await viewModel.testXPost() }
                                 } label: {
@@ -635,6 +684,24 @@ struct MainComposerView: View {
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
                                     .background(Color.accentColor.opacity(0.1))
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(!viewModel.isXConfigured)
+                                
+                                Button {
+                                    Task { await viewModel.resetXCredentials() }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "key.fill")
+                                            .foregroundColor(.red)
+                                        Text("Reset X Credentials")
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.red.opacity(0.1))
                                     .cornerRadius(6)
                                 }
                                 .buttonStyle(.plain)
@@ -736,6 +803,10 @@ enum ComposerSection: CaseIterable {
     case history
     case settings
     
+    static var sidebarCases: [ComposerSection] {
+        [.compose, .drafts, .history]
+    }
+    
     var title: String {
         switch self {
         case .compose: return "Compose"
@@ -783,14 +854,15 @@ class SharedComposerState: ObservableObject {
         }
     }
     
-    func saveDraft(text: String, tone: Tone) async {
-        guard let store = localStore, !text.isEmpty else { return }
+    func saveDraft(text: String, tone: Tone, existingDraftId: UUID? = nil) async -> Draft? {
+        guard let store = localStore, !text.isEmpty else { return nil }
+        let now = Date()
         
         let draft = Draft(
-            id: UUID(),
+            id: existingDraftId ?? UUID(),
             text: text,
-            createdAt: Date(),
-            updatedAt: Date(),
+            createdAt: now,
+            updatedAt: now,
             tone: tone,
             attachments: []
         )
@@ -798,20 +870,29 @@ class SharedComposerState: ObservableObject {
         do {
             try await store.saveDraft(draft)
             await loadData()
+            return draft
         } catch {
             print("Error saving draft: \(error)")
+            return nil
         }
     }
     
-    func createPost(text: String, tone: Tone) async {
+    func createPost(
+        text: String,
+        tone: Tone,
+        status: PostStatus = .queued,
+        remoteId: String? = nil,
+        accountUsername: String? = nil
+    ) async {
         guard let store = localStore, !text.isEmpty else { return }
         
         let post = Post(
             id: UUID(),
             text: text,
-            status: .queued,
+            status: status,
             createdAt: Date(),
-            remoteId: nil,
+            remoteId: remoteId,
+            accountUsername: accountUsername,
             tone: tone
         )
         
@@ -834,12 +915,18 @@ class MainComposerViewModel: ObservableObject {
     @Published var isSaving: Bool = false
     @Published var showSuccessFeedback: Bool = false
     @Published var showSaveFeedback: Bool = false
+    @Published var showResetFeedback: Bool = false
     @Published var showErrorFeedback: Bool = false
     @Published var errorMessage: String = ""
     @Published var isXConfigured: Bool = false
     
     private let sharedState = SharedComposerState.shared
-    private let xClient = XOAuth1Client.shared
+    private let xClient = XAPIClient.shared
+    private let keychain = KeychainManager.shared
+    private var oauthSession: XOAuth2AuthorizationSession?
+    private let xRedirectURI = "agentdodo://auth/callback"
+    private let xCallbackScheme = "agentdodo"
+    private var currentDraftId: UUID?
     
     var drafts: [Draft] { sharedState.drafts }
     var posts: [Post] { sharedState.posts }
@@ -850,8 +937,7 @@ class MainComposerViewModel: ObservableObject {
     
     func loadData() async {
         await sharedState.loadData()
-        await xClient.loadCredentials()
-        isXConfigured = await xClient.isConfigured
+        isXConfigured = await xClient.isAuthenticated
         objectWillChange.send()
     }
     
@@ -862,20 +948,28 @@ class MainComposerViewModel: ObservableObject {
         
         do {
             // Try to post to X API
-            if await xClient.isConfigured {
-                let response = try await xClient.postTweet(text: text)
-                print("Posted tweet with ID: \(response.data.id)")
+            if await xClient.isAuthenticated {
+                let response = try await xClient.createTweet(text: text)
+                print("Posted tweet with ID: \(response.id)")
                 
                 // Save to local history with remote ID
-                await sharedState.createPost(text: text, tone: selectedTone)
+                let accountUsername = await resolveAccountUsername()
+                await sharedState.createPost(
+                    text: text,
+                    tone: selectedTone,
+                    status: .sent,
+                    remoteId: response.id,
+                    accountUsername: accountUsername
+                )
             } else {
                 // Just save locally if not configured
-                await sharedState.createPost(text: text, tone: selectedTone)
+                await sharedState.createPost(text: text, tone: selectedTone, status: .queued)
             }
             
             showSuccessFeedback = true
             text = ""
             isPosting = false
+            currentDraftId = nil
             objectWillChange.send()
             
             try? await Task.sleep(for: .seconds(1.5))
@@ -896,7 +990,9 @@ class MainComposerViewModel: ObservableObject {
         
         isSaving = true
         
-        await sharedState.saveDraft(text: text, tone: selectedTone)
+        if let draft = await sharedState.saveDraft(text: text, tone: selectedTone, existingDraftId: currentDraftId) {
+            currentDraftId = draft.id
+        }
         
         showSaveFeedback = true
         isSaving = false
@@ -909,34 +1005,107 @@ class MainComposerViewModel: ObservableObject {
     func loadDraft(_ draft: Draft) {
         text = draft.text
         selectedTone = draft.tone
+        currentDraftId = draft.id
     }
     
-    func configureXAPI() async {
+    func resetComposer() {
+        text = ""
+        selectedTone = .neutral
+        currentDraftId = nil
+        showErrorFeedback = false
+        errorMessage = ""
+    }
+    
+    func connectX() async {
+        isXConfigured = false
         do {
-            try await xClient.configure(
-                consumerKey: XAPIConfig.consumerKey,
-                consumerSecret: XAPIConfig.consumerSecret,
-                accessToken: XAPIConfig.accessToken,
-                accessTokenSecret: XAPIConfig.accessTokenSecret
+            guard let clientId = await resolveXClientId() else {
+                throw XOAuth2AuthError.unableToStart
+            }
+            
+            try await keychain.save(clientId, for: .xClientId)
+            if !XAPIConfig.clientSecret.isEmpty {
+                try await keychain.save(XAPIConfig.clientSecret, for: .xClientSecret)
+            }
+            
+            guard let auth = xClient.getAuthorizationURL(
+                clientId: clientId,
+                redirectURI: xRedirectURI
+            ) else {
+                throw XOAuth2AuthError.unableToStart
+            }
+            
+            print("[X OAuth2] Client ID prefix: \(clientId.prefix(8))")
+            print("[X OAuth2] Auth URL: \(auth.url.absoluteString)")
+            let session = XOAuth2AuthorizationSession()
+            oauthSession = session
+            
+            let callbackURL = try await session.start(
+                url: auth.url,
+                callbackScheme: xCallbackScheme
             )
+            
+            print("[X OAuth2] Callback URL: \(callbackURL.absoluteString)")
+            guard let code = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "code" })?
+                .value else {
+                let items = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?
+                    .queryItems?
+                    .map { "\($0.name)=\($0.value ?? "")" }
+                    .joined(separator: "&") ?? ""
+                print("[X OAuth2] Callback query items: \(items)")
+                throw XOAuth2AuthError.missingAuthorizationCode
+            }
+            
+            _ = try await xClient.exchangeCodeForToken(
+                clientId: clientId,
+                code: code,
+                codeVerifier: auth.pkce.codeVerifier,
+                redirectURI: xRedirectURI
+            )
+            
+            let user = try await xClient.getMe()
+            try? await keychain.save(user.username, for: .xUsername)
+            
             isXConfigured = true
             showSaveFeedback = true
-            print("X API configured successfully")
+            print("X OAuth2 configured successfully")
             
             try? await Task.sleep(for: .seconds(1.5))
             showSaveFeedback = false
         } catch {
-            errorMessage = "Failed to configure X: \(error.localizedDescription)"
+            errorMessage = "Failed to connect X: \(error.localizedDescription)"
             showErrorFeedback = true
-            print("Failed to configure X API: \(error)")
+            print("Failed to configure X OAuth2: \(error)")
             
             try? await Task.sleep(for: .seconds(3))
             showErrorFeedback = false
         }
     }
     
+    private func resolveXClientId() async -> String? {
+        if let stored = try? await keychain.retrieve(.xClientId), !stored.isEmpty {
+            if stored == XAPIConfig.consumerKey, !XAPIConfig.clientID.isEmpty {
+                return XAPIConfig.clientID
+            }
+            return stored
+        }
+        if !XAPIConfig.clientID.isEmpty {
+            return XAPIConfig.clientID
+        }
+        return nil
+    }
+    
+    private func resolveAccountUsername() async -> String? {
+        if let stored = try? await keychain.retrieve(.xUsername), !stored.isEmpty {
+            return stored
+        }
+        return nil
+    }
+    
     func testXPost() async {
-        guard await xClient.isConfigured else {
+        guard await xClient.isAuthenticated else {
             errorMessage = "X API not configured"
             showErrorFeedback = true
             try? await Task.sleep(for: .seconds(2))
@@ -945,8 +1114,8 @@ class MainComposerViewModel: ObservableObject {
         }
         
         do {
-            let response = try await xClient.postTweet(text: "Test from AgentDodo 🐦")
-            print("Posted tweet: \(response.data.id)")
+            let response = try await xClient.createTweet(text: "Test from AgentDodo 🐦")
+            print("Posted tweet: \(response.id)")
             showSuccessFeedback = true
             try? await Task.sleep(for: .seconds(1.5))
             showSuccessFeedback = false
@@ -954,6 +1123,26 @@ class MainComposerViewModel: ObservableObject {
             errorMessage = error.localizedDescription
             showErrorFeedback = true
             print("Post failed: \(error)")
+            try? await Task.sleep(for: .seconds(3))
+            showErrorFeedback = false
+        }
+    }
+    
+    func resetXCredentials() async {
+        do {
+            try await xClient.logout()
+            try await keychain.delete(.xClientId)
+            try await keychain.delete(.xClientSecret)
+            try await keychain.delete(.xAccessToken)
+            try await keychain.delete(.xRefreshToken)
+            try await keychain.delete(.xUsername)
+            isXConfigured = false
+            showResetFeedback = true
+            try? await Task.sleep(for: .seconds(1.5))
+            showResetFeedback = false
+        } catch {
+            errorMessage = "Failed to reset X credentials: \(error.localizedDescription)"
+            showErrorFeedback = true
             try? await Task.sleep(for: .seconds(3))
             showErrorFeedback = false
         }

@@ -334,8 +334,8 @@ struct OllamaStreamChunk: Decodable, Sendable {
     }
 }
 
-struct OllamaChatMessage: Sendable {
-    let role: String // "system", "user", "assistant"
+struct OllamaChatMessage: @unchecked Sendable {
+    let role: String
     let content: String
     
     var dictionary: [String: String] {
@@ -392,7 +392,7 @@ struct OllamaEmbeddingsResponse: Decodable, Sendable {
     let embedding: [Double]
 }
 
-struct OllamaOptions: Sendable {
+struct OllamaOptions: @unchecked Sendable {
     var temperature: Double?
     var topP: Double?
     var topK: Int?

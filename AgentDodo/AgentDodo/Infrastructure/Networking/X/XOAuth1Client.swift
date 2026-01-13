@@ -6,6 +6,7 @@ import CryptoKit
 
 actor XOAuth1Client {
     private let keychain: KeychainManager
+    private let session: URLSession
     
     // OAuth 1.0a credentials
     private var consumerKey: String?
@@ -17,9 +18,25 @@ actor XOAuth1Client {
     
     private init() {
         self.keychain = KeychainManager.shared
+        
+        // Use standard session (background sessions cannot be used with completion handlers)
+        let configuration = URLSessionConfiguration.default
+        
+        // Configure headers and keep DNS bypass via Host header in requests
+        configuration.httpAdditionalHeaders = [
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9,*;q=0.5"
+        ]
+        
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 60
+        configuration.waitsForConnectivity = true
+        
+        self.session = URLSession(configuration: configuration)
     }
-    
-    // MARK: - Configuration
+
+// MARK: - Configuration
     
     func configure(
         consumerKey: String,
@@ -173,12 +190,32 @@ actor XOAuth1Client {
     
     // MARK: - API Methods
     
+    nonisolated private func decodeTweetResponse(_ data: Data) throws -> XOAuth1TweetResponse {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(XOAuth1TweetResponse.self, from: data)
+    }
+    
+    nonisolated private func decodeUserResponse(_ data: Data) throws -> XOAuth1UserResponse {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(XOAuth1UserResponse.self, from: data)
+    }
+    
+    nonisolated private func decodeErrorResponse(_ data: Data) throws -> XOAuth1ErrorResponse {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(XOAuth1ErrorResponse.self, from: data)
+    }
+    
     func postTweet(text: String) async throws -> XOAuth1TweetResponse {
         guard isConfigured else {
             throw XOAuth1Error.notConfigured
         }
         
-        let url = URL(string: "https://api.twitter.com/2/tweets")!
+        guard let url = URL(string: "https://api.twitter.com/2/tweets") else {
+            throw XOAuth1Error.invalidResponse
+        }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -194,19 +231,17 @@ actor XOAuth1Client {
         let body = ["text": text]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await self.session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw XOAuth1Error.invalidResponse
         }
         
         if httpResponse.statusCode == 201 {
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            return try decoder.decode(XOAuth1TweetResponse.self, from: data)
+            return try decodeTweetResponse(data)
         } else {
             // Try to parse error
-            if let errorResponse = try? JSONDecoder().decode(XOAuth1ErrorResponse.self, from: data) {
+            if let errorResponse = try? decodeErrorResponse(data) {
                 throw XOAuth1Error.apiError(
                     code: httpResponse.statusCode,
                     message: errorResponse.detail ?? errorResponse.title ?? "Unknown error"
@@ -221,7 +256,9 @@ actor XOAuth1Client {
             throw XOAuth1Error.notConfigured
         }
         
-        let url = URL(string: "https://api.twitter.com/2/users/me?user.fields=profile_image_url,description,public_metrics")!
+        guard let url = URL(string: "https://api.twitter.com/2/users/me?user.fields=profile_image_url,description,public_metrics") else {
+            throw XOAuth1Error.invalidResponse
+        }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -231,7 +268,7 @@ actor XOAuth1Client {
         }
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await self.session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw XOAuth1Error.invalidResponse
@@ -241,9 +278,7 @@ actor XOAuth1Client {
             throw XOAuth1Error.httpError(statusCode: httpResponse.statusCode)
         }
         
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(XOAuth1UserResponse.self, from: data)
+        return try decodeUserResponse(data)
     }
     
     func deleteTweet(id: String) async throws {
@@ -284,20 +319,20 @@ actor XOAuth1Client {
 
 // MARK: - Response Models
 
-struct XOAuth1TweetResponse: Decodable, Sendable {
+nonisolated struct XOAuth1TweetResponse: Decodable, Sendable {
     let data: XOAuth1TweetData
 }
 
-struct XOAuth1TweetData: Decodable, Sendable {
+nonisolated struct XOAuth1TweetData: Decodable, Sendable {
     let id: String
     let text: String
 }
 
-struct XOAuth1UserResponse: Decodable, Sendable {
+nonisolated struct XOAuth1UserResponse: Decodable, Sendable {
     let data: XOAuth1UserData
 }
 
-struct XOAuth1UserData: Decodable, Sendable {
+nonisolated struct XOAuth1UserData: Decodable, Sendable {
     let id: String
     let name: String
     let username: String
@@ -306,14 +341,14 @@ struct XOAuth1UserData: Decodable, Sendable {
     let publicMetrics: XOAuth1PublicMetrics?
 }
 
-struct XOAuth1PublicMetrics: Decodable, Sendable {
+nonisolated struct XOAuth1PublicMetrics: Decodable, Sendable {
     let followersCount: Int?
     let followingCount: Int?
     let tweetCount: Int?
     let listedCount: Int?
 }
 
-struct XOAuth1ErrorResponse: Decodable, Sendable {
+nonisolated struct XOAuth1ErrorResponse: Decodable, Sendable {
     let title: String?
     let detail: String?
     let type: String?

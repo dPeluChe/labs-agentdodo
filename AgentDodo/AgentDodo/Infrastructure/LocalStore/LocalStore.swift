@@ -52,4 +52,13 @@ actor LocalStore: LocalStoreProtocol {
             try modelContext.save()
         }
     }
+    
+    func deleteAllDrafts() throws {
+        let descriptor = FetchDescriptor<DraftEntity>()
+        let entities = try modelContext.fetch(descriptor)
+        for entity in entities {
+            modelContext.delete(entity)
+        }
+        try modelContext.save()
+    }
 }

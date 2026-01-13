@@ -8,6 +8,7 @@ enum PostMapper: Sendable {
             status: PostStatus(rawValue: entity.status) ?? .queued,
             createdAt: entity.createdAt,
             remoteId: entity.remoteId,
+            accountUsername: entity.accountUsername,
             tone: entity.tone.flatMap { Tone(rawValue: $0) }
         )
     }
@@ -19,6 +20,7 @@ enum PostMapper: Sendable {
             status: domain.status.rawValue,
             createdAt: domain.createdAt,
             remoteId: domain.remoteId,
+            accountUsername: domain.accountUsername,
             tone: domain.tone?.rawValue
         )
     }

@@ -7,4 +7,5 @@ protocol LocalStoreProtocol {
     func saveDraft(_ draft: Draft) async throws
     func fetchDrafts() async throws -> [Draft]
     func deleteDraft(id: UUID) async throws
+    func deleteAllDrafts() async throws
 }

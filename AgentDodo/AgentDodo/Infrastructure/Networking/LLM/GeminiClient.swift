@@ -345,8 +345,8 @@ struct GeminiStreamChunk: Decodable, Sendable {
     }
 }
 
-struct GeminiChatMessage: Sendable {
-    let role: String // "user" or "model"
+struct GeminiChatMessage: @unchecked Sendable {
+    let role: String
     let text: String
     
     var dictionary: [String: Any] {
@@ -365,7 +365,7 @@ struct GeminiChatMessage: Sendable {
     }
 }
 
-struct GeminiGenerationConfig: Sendable {
+struct GeminiGenerationConfig: @unchecked Sendable {
     var temperature: Double?
     var topP: Double?
     var topK: Int?
@@ -383,7 +383,7 @@ struct GeminiGenerationConfig: Sendable {
     }
 }
 
-struct GeminiSafetySetting: Sendable {
+struct GeminiSafetySetting: @unchecked Sendable {
     let category: GeminiHarmCategory
     let threshold: GeminiHarmBlockThreshold
     

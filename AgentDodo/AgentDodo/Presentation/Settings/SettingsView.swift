@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
     @AppStorage("autoSaveDrafts") private var autoSaveDrafts = true
@@ -6,6 +7,8 @@ struct SettingsView: View {
     @AppStorage("showCharacterCount") private var showCharacterCount = true
     @AppStorage("confirmBeforePosting") private var confirmBeforePosting = false
     @AppStorage("quickComposerFloating") private var quickComposerFloating = true
+    @Environment(\.modelContext) private var modelContext
+    @State private var showDeleteDraftsConfirm = false
     
     var body: some View {
         TabView {
@@ -56,8 +59,41 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            
+            Section {
+                Button("Delete All Drafts", role: .destructive) {
+                    showDeleteDraftsConfirm = true
+                }
+            } header: {
+                Text("Data")
+            } footer: {
+                Text("This removes all saved drafts from local storage.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
+        .confirmationDialog(
+            "Delete all drafts?",
+            isPresented: $showDeleteDraftsConfirm
+        ) {
+            Button("Delete All Drafts", role: .destructive) {
+                Task {
+                    do {
+                        try await localStore.deleteAllDrafts()
+                    } catch {
+                        // Keep silent for now; drafts view will refresh on next load.
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This action cannot be undone.")
+        }
+    }
+
+    private var localStore: LocalStore {
+        LocalStore(modelContainer: modelContext.container)
     }
     
     // MARK: - Composer Settings

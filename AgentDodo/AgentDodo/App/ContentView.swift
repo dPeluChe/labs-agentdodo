@@ -58,8 +58,6 @@ struct ContentView: View {
             DashboardDraftsView(viewModel: draftsVM)
         case .analytics:
             DashboardAnalyticsView()
-        case .settings:
-            SettingsView()
         case .none:
             DashboardWelcomeView()
         }
@@ -72,14 +70,12 @@ enum DashboardSection: CaseIterable {
     case history
     case drafts
     case analytics
-    case settings
     
     var title: String {
         switch self {
         case .history: return "History"
         case .drafts: return "Drafts"
         case .analytics: return "Analytics"
-        case .settings: return "Settings"
         }
     }
     
@@ -88,7 +84,6 @@ enum DashboardSection: CaseIterable {
         case .history: return "clock"
         case .drafts: return "doc.text"
         case .analytics: return "chart.bar"
-        case .settings: return "gearshape"
         }
     }
 }
@@ -157,7 +152,22 @@ struct DashboardHistoryView: View {
                                 .font(.caption)
                                 .foregroundStyle(statusColor(post.status))
                             
-                            Text(post.createdAt, style: .relative)
+                            if let url = postURL(for: post) {
+                                Link(destination: url) {
+                                    Image(systemName: "arrow.up.right.square")
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.mini)
+                                .help("Open on X")
+                            }
+                            
+                            if let username = post.accountUsername, !username.isEmpty {
+                                Text("@\(username)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Text(relativeTimestamp(post.createdAt))
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
@@ -201,6 +211,23 @@ struct DashboardHistoryView: View {
         case .sent: return .green
         case .failed: return .red
         }
+    }
+    
+    private func postURL(for post: Post) -> URL? {
+        guard post.status == .sent, let remoteId = post.remoteId else { return nil }
+        return URL(string: "https://x.com/i/web/status/\(remoteId)")
+    }
+    
+    private func relativeTimestamp(_ date: Date) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.allowedUnits = [.minute, .hour, .day, .weekOfMonth, .month, .year]
+        formatter.maximumUnitCount = 1
+        let now = Date()
+        if now.timeIntervalSince(date) < 60 {
+            return "1m"
+        }
+        return formatter.string(from: date, to: now) ?? "1m"
     }
 }
 

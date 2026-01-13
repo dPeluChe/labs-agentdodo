@@ -1,14 +1,14 @@
 import Foundation
 
 protocol APIEndpoint: Sendable {
-    var baseURL: URL { get }
-    var path: String { get }
-    var method: HTTPMethod { get }
-    var headers: [String: String] { get }
-    var queryItems: [URLQueryItem]? { get }
-    var body: Data? { get }
-    var requiresAuth: Bool { get }
-    var timeout: TimeInterval { get }
+    nonisolated var baseURL: URL { get }
+    nonisolated var path: String { get }
+    nonisolated var method: HTTPMethod { get }
+    nonisolated var headers: [String: String] { get }
+    nonisolated var queryItems: [URLQueryItem]? { get }
+    nonisolated var body: Data? { get }
+    nonisolated var requiresAuth: Bool { get }
+    nonisolated var timeout: TimeInterval { get }
 }
 
 extension APIEndpoint {

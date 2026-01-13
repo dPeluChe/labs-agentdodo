@@ -89,6 +89,9 @@ struct ComposerView: View {
         .onAppear {
             isEditorFocused = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .quickComposerNewPost)) { _ in
+            viewModel.clearComposer()
+        }
     }
     
     // MARK: - Drop Handling
@@ -266,4 +269,3 @@ struct ComposerView: View {
         .menuStyle(.borderlessButton)
     }
 }
-

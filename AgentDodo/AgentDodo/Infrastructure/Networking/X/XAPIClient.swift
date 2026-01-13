@@ -19,12 +19,7 @@ actor XAPIClient {
     
     // MARK: - OAuth 2.0 PKCE
     
-    struct PKCECredentials {
-        let codeVerifier: String
-        let codeChallenge: String
-    }
-    
-    func generatePKCE() -> PKCECredentials {
+    nonisolated static func generatePKCE() -> XPKCECredentials {
         // Generate random code verifier (43-128 characters)
         let verifier = generateRandomString(length: 64)
         
@@ -36,20 +31,20 @@ actor XAPIClient {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
         
-        return PKCECredentials(codeVerifier: verifier, codeChallenge: challenge)
+        return XPKCECredentials(codeVerifier: verifier, codeChallenge: challenge)
     }
     
-    private func generateRandomString(length: Int) -> String {
+    nonisolated private static func generateRandomString(length: Int) -> String {
         let characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
         return String((0..<length).map { _ in characters.randomElement()! })
     }
     
-    func getAuthorizationURL(
+    nonisolated func getAuthorizationURL(
         clientId: String,
         redirectURI: String,
         scopes: [XScope] = [.tweetRead, .tweetWrite, .usersRead, .offlineAccess]
-    ) -> (url: URL, pkce: PKCECredentials)? {
-        let pkce = generatePKCE()
+    ) -> (url: URL, pkce: XPKCECredentials)? {
+        let pkce = Self.generatePKCE()
         
         let endpoint = XAPIEndpoint.authorize(
             clientId: clientId,
@@ -238,7 +233,7 @@ actor XAPIClient {
 
 // MARK: - Response Models
 
-struct XTokenResponse: Decodable, Sendable {
+nonisolated struct XTokenResponse: Decodable, Sendable {
     let tokenType: String
     let expiresIn: Int
     let accessToken: String
@@ -246,11 +241,11 @@ struct XTokenResponse: Decodable, Sendable {
     let scope: String
 }
 
-struct XUserResponse: Decodable, Sendable {
+nonisolated struct XUserResponse: Decodable, Sendable {
     let data: XUser
 }
 
-struct XUser: Decodable, Identifiable, Sendable {
+nonisolated struct XUser: Decodable, Identifiable, Sendable {
     let id: String
     let name: String
     let username: String
@@ -259,23 +254,23 @@ struct XUser: Decodable, Identifiable, Sendable {
     let publicMetrics: XPublicMetrics?
 }
 
-struct XPublicMetrics: Decodable, Sendable {
+nonisolated struct XPublicMetrics: Decodable, Sendable {
     let followersCount: Int?
     let followingCount: Int?
     let tweetCount: Int?
     let listedCount: Int?
 }
 
-struct XTweetResponse: Decodable, Sendable {
+nonisolated struct XTweetResponse: Decodable, Sendable {
     let data: XTweet
 }
 
-struct XTweetsResponse: Decodable, Sendable {
+nonisolated struct XTweetsResponse: Decodable, Sendable {
     let data: [XTweet]?
     let meta: XMeta?
 }
 
-struct XTweet: Decodable, Identifiable, Sendable {
+nonisolated struct XTweet: Decodable, Identifiable, Sendable {
     let id: String
     let text: String
     let authorId: String?
@@ -283,7 +278,7 @@ struct XTweet: Decodable, Identifiable, Sendable {
     let publicMetrics: XTweetMetrics?
 }
 
-struct XTweetMetrics: Decodable, Sendable {
+nonisolated struct XTweetMetrics: Decodable, Sendable {
     let retweetCount: Int?
     let replyCount: Int?
     let likeCount: Int?
@@ -291,16 +286,16 @@ struct XTweetMetrics: Decodable, Sendable {
     let impressionCount: Int?
 }
 
-struct XMeta: Decodable, Sendable {
+nonisolated struct XMeta: Decodable, Sendable {
     let resultCount: Int?
     let nextToken: String?
     let previousToken: String?
 }
 
-struct XDeleteResponse: Decodable, Sendable {
+nonisolated struct XDeleteResponse: Decodable, Sendable {
     let data: XDeleteData
 }
 
-struct XDeleteData: Decodable, Sendable {
+nonisolated struct XDeleteData: Decodable, Sendable {
     let deleted: Bool
 }

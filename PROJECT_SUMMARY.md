@@ -1,11 +1,11 @@
 # Agent Dodo - Project Summary
 
-> **Status:** Phase 2 - API Infrastructure ✅ COMPLETE  
-> **Last Updated:** 2026-01-11
+> **Status:** Phase 3 - Real Integration ✅ IN PROGRESS  
+> **Last Updated:** 2026-01-12
 
 ## 🚀 Executive Summary
 
-Agent Dodo is a **native macOS client** for social media management with AI-powered writing assistance. The complete Write → Save → History flow is operational with a polished UI, and the API infrastructure for X, Ollama, and Gemini is now ready for integration.
+Agent Dodo is a **native macOS client** for social media management with AI-powered writing assistance. The app now supports real X OAuth2 login and posting, with a tighter Quick Composer flow, improved history entries, and better credential management.
 
 ## ✅ Completed Features
 
@@ -18,8 +18,8 @@ Agent Dodo is a **native macOS client** for social media management with AI-powe
 - **Quick Composer:** Floating panel (⌘+⇧+N) for rapid posting.
 
 ### 2. History & Drafts Management
-- **Post History:** Status badges (Sent/Queued/Failed), timestamps, tone.
-- **Drafts:** List view, swipe-to-delete, edit functionality.
+- **Post History:** Status badges (Sent/Queued/Failed), X deep-link button, account label, minute-level timestamps.
+- **Drafts:** List view, swipe-to-delete, edit functionality, and consistent draft updates.
 - **Empty States:** Friendly UI when no content exists.
 
 ### 3. Data Persistence Layer
@@ -29,16 +29,16 @@ Agent Dodo is a **native macOS client** for social media management with AI-powe
 
 ### 4. API Infrastructure (NEW)
 - **Core Networking:** Generic `APIClient` with async/await, streaming, uploads.
-- **X API:** OAuth 2.0 PKCE, tweets, users, timeline, media upload.
+- **X API:** OAuth 2.0 PKCE login flow with ASWebAuthenticationSession; real tweet posting.
 - **Ollama:** Local LLM integration with streaming support.
 - **Gemini:** Google AI API with multi-turn chat.
 - **LLM Manager:** Unified interface for all AI providers.
 - **Keychain:** Secure credential storage.
 
 ### 5. Settings & Configuration
-- **API Connections Tab:** Configure X, Ollama, Gemini credentials.
+- **API Connections Tab:** OAuth2 login, reset credentials, and connected account label.
 - **Connection Status:** Real-time availability indicators.
-- **Composer Settings:** Auto-save, confirm before posting.
+- **Composer Settings:** Auto-save, confirm before posting, data management.
 
 ## 📁 Project Structure
 
@@ -71,12 +71,11 @@ AgentDodo/
 
 ## 🚧 Next Steps
 
-1. **OAuth Flow:** Implement ASWebAuthenticationSession for X login.
+1. **Multi-Account:** Store tokens per account + switcher UI.
 2. **AI Assistant:** Connect LLM to Composer ("✨ Improve" button).
-3. **Real Posting:** Send posts to X via API.
-4. **Inbox:** Fetch mentions and DMs.
+3. **Inbox:** Fetch mentions and DMs.
 
 ## 📈 Technical Notes
-- Swift 6 warnings present but non-blocking (actor isolation).
-- ViewModel recreation on navigation (acceptable for current scope).
+- Swift 6 warnings resolved for X models.
+- Quick Composer and menu bar flows are now synced via notifications.
 - Shared components extracted for reusability.

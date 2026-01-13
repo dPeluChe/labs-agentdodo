@@ -6,6 +6,7 @@ struct Post: Identifiable, Equatable {
     let status: PostStatus
     let createdAt: Date
     let remoteId: String?
+    let accountUsername: String?
     let tone: Tone?
 }
 

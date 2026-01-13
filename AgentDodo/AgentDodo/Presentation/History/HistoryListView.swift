@@ -61,14 +61,27 @@ struct HistoryListView: View {
 
 struct PostRowView: View {
     let post: Post
+    @Environment(\.openURL) private var openURL
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Header: Status + Date
             HStack {
                 statusBadge
+                
+                if let url = postURL {
+                    Button {
+                        openURL(url)
+                    } label: {
+                        Image(systemName: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .help("Open on X")
+                }
+                
                 Spacer()
-                Text(post.createdAt, style: .relative)
+                Text(relativeTimestamp(post.createdAt))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -79,15 +92,20 @@ struct PostRowView: View {
                 .lineLimit(4)
             
             // Footer: Tone
-            if let tone = post.tone {
-                HStack(spacing: 4) {
+            HStack(spacing: 6) {
+                if let tone = post.tone {
                     Image(systemName: tone.icon)
                         .font(.caption)
                     Text(tone.rawValue)
                         .font(.caption)
                 }
-                .foregroundStyle(.secondary)
+                
+                if let username = post.accountUsername, !username.isEmpty {
+                    Text("@\(username)")
+                        .font(.caption)
+                }
             }
+            .foregroundStyle(.secondary)
         }
         .padding(.vertical, 8)
     }
@@ -113,5 +131,22 @@ struct PostRowView: View {
         case .queued: return .orange
         case .failed: return .red
         }
+    }
+    
+    private var postURL: URL? {
+        guard post.status == .sent, let remoteId = post.remoteId else { return nil }
+        return URL(string: "https://x.com/i/web/status/\(remoteId)")
+    }
+    
+    private func relativeTimestamp(_ date: Date) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.allowedUnits = [.minute, .hour, .day, .weekOfMonth, .month, .year]
+        formatter.maximumUnitCount = 1
+        let now = Date()
+        if now.timeIntervalSince(date) < 60 {
+            return "1m"
+        }
+        return formatter.string(from: date, to: now) ?? "1m"
     }
 }
